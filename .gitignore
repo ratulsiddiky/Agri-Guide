@@ -1,64 +1,61 @@
-#frontend
-# See https://docs.github.com/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+# =========================
+# Frontend / Angular / Node
+# =========================
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+frontend/.vscode/
 
-# Compiled output
-/dist
-/tmp
-/out-tsc
-/bazel-out
-
-# Node
-/node_modules
-npm-debug.log
-yarn-error.log
 node_modules/
-
-# IDEs and editors
-.idea/
-.project
-.classpath
-.c9/
-*.launch
-.settings/
-*.sublime-workspace
-.env
-*.temp
-*.log
-
-# Visual Studio Code
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-!.vscode/mcp.json
-.history/*
-
-# Miscellaneous
-/.angular/cache
-.sass-cache/
-/connect.lock
-/coverage
-/libpeerconnection.log
-testem.log
-/typings
-__screenshots__/
-__pycache__/
+dist/
 .angular/
 
-# System files
-.DS_Store
-Thumbs.db
+npm-debug.log
+yarn-error.log
+coverage/
+tmp/
+out-tsc/
+bazel-out/
 
-#backend
+# =========================
+# Backend / Python / Flask
+# =========================
+backend/.venv/
+backend/venv/
+backend/__pycache__/
+backend/.pytest_cache/
+backend/.env
+
 __pycache__/
 *.py[cod]
 .pytest_cache/
-.env
 .venv/
 venv/
-dist/
-build/
-node_modules/
-*.temp
+.env
+
+# SQLite / local databases
+*.db
+*.sqlite
+*.sqlite3
+backend/instance/*.db
+instance/*.db
+
+# =========================
+# IDE / Editor
+# =========================
+.idea/
+.vscode/
+.history/
+
+# =========================
+# Logs / temporary files
+# =========================
 *.log
+*.temp
+build/
+
+# =========================
+# System files
+# =========================
+.DS_Store
+Thumbs.db
