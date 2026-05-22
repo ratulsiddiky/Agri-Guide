@@ -1,0 +1,30 @@
+@if (notificationService.notification(); as notice) {
+  <div class="position-fixed top-0 end-0 p-3" style="z-index: 1100;">
+    <div
+      class="alert shadow-sm mb-0"
+      role="alert"
+      [class.alert-success]="notice.type === 'success'"
+      [class.alert-danger]="notice.type === 'error'"
+      [class.alert-info]="notice.type === 'info'"
+    >
+      <div class="d-flex align-items-center gap-2">
+        <strong>
+          @if (notice.type === 'success') {
+            Success
+          } @else if (notice.type === 'error') {
+            Error
+          } @else {
+            Info
+          }
+        </strong>
+        <span>{{ notice.message }}</span>
+        <button
+          type="button"
+          class="btn-close ms-auto"
+          aria-label="Close"
+          (click)="notificationService.clear()"
+        ></button>
+      </div>
+    </div>
+  </div>
+}

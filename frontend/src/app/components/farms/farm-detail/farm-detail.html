@@ -1,0 +1,237 @@
+<div class="container mt-4">
+
+  @if (toastMessage) {
+    <div class="position-fixed top-0 end-0 p-3" style="z-index: 1080;">
+      <div class="toast show text-white border-0" [class.bg-success]="toastType === 'success'" [class.bg-danger]="toastType === 'danger'" role="status" aria-live="polite">
+        <div class="d-flex">
+          <div class="toast-body">{{ toastMessage }}</div>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (loading) {
+    <div class="alert alert-info">⏳ Loading farm details...</div>
+  }
+
+  @if (error) {
+    <div class="alert alert-danger">
+      ❌ {{ errorMessage || 'Could not load this farm.' }}
+      <a routerLink="/farms" class="alert-link ms-2">← Back to Farms</a>
+    </div>
+  }
+
+  @if (farm) {
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+      <h2 class="text-success mb-0">🚜 {{ farm.farm_name }}</h2>
+      <div class="d-flex gap-2">
+        <a [routerLink]="['/farms', farm._id, 'edit']" class="btn btn-outline-primary btn-sm">Edit Farm</a>
+        <a routerLink="/farms" class="btn btn-outline-secondary btn-sm">← Back to All Farms</a>
+      </div>
+    </div>
+
+    <div class="row g-4">
+
+      <!-- Farm Info -->
+      <div class="col-md-6">
+        <div class="card shadow-sm border-success h-100">
+          <div class="card-header bg-success text-white">📋 Farm Info</div>
+          <div class="card-body">
+            <ul class="list-group list-group-flush">
+              <li class="list-group-item">
+                <strong>Crop Type:</strong> {{ farm.crop_type || 'Not set' }}
+              </li>
+              <li class="list-group-item">
+                <strong>Owner ID:</strong>
+                <small class="text-muted ms-1">{{ farm.owner_id }}</small>
+              </li>
+              <li class="list-group-item">
+                <strong>Created:</strong> {{ farm.created_at | date:'mediumDate' }}
+              </li>
+              <li class="list-group-item">
+                <strong>Total Sensors:</strong>
+                <span class="badge bg-secondary ms-1">{{ farm.sensors?.length || 0 }}</span>
+              </li>
+              <li class="list-group-item">
+                <strong>Weather Logs:</strong>
+                <span class="badge bg-info ms-1">{{ farm.weather_logs?.length || 0 }}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alert History -->
+      <div class="col-md-6">
+        <div class="card shadow-sm border-warning h-100">
+          <div class="card-header bg-warning text-dark">⚠️ Alert History</div>
+          <div class="card-body">
+            @if (farm.alerts_history && farm.alerts_history.length > 0) {
+              <ul class="list-group list-group-flush">
+                @for (alert of farm.alerts_history; track $index) {
+                  <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                    <span class="badge bg-danger">{{ alert.alert_type }}</span>
+                    <small class="text-muted">{{ alert.timestamp | date:'short' }}</small>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="text-success mb-0">✅ No active alerts — all clear!</p>
+            }
+          </div>
+        </div>
+      </div>
+
+      <!-- Weather Insights -->
+      <div class="col-md-6">
+        <div class="card shadow-sm border-info h-100">
+          <div class="card-header bg-info text-white">🌤️ Weather Insights</div>
+          <div class="card-body">
+            @if (insights) {
+              <ul class="list-group list-group-flush mb-3">
+                <li class="list-group-item">
+                  <strong>Avg Temperature:</strong> {{ insights.average_temp }}°C
+                </li>
+                <li class="list-group-item">
+                  <strong>Avg Wind Speed:</strong> {{ insights.average_wind }} km/h
+                </li>
+              </ul>
+            } @else {
+              <p class="text-muted mb-3">
+                No weather data yet. Click below to sync live weather for this farm.
+              </p>
+            }
+
+            @if (syncMessage) {
+              <div class="alert py-1 small mb-2"
+                [class.alert-success]="syncMessage.startsWith('✅')"
+                [class.alert-danger]="syncMessage.startsWith('❌')">
+                {{ syncMessage }}
+              </div>
+            }
+
+            <button class="btn btn-outline-info btn-sm w-100"
+              (click)="syncWeather()"
+              [disabled]="syncLoading">
+              @if (syncLoading) {
+                <span class="spinner-border spinner-border-sm me-1"></span>
+              }
+              🔄 Sync Weather Now
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Irrigation -->
+      <div class="col-md-6">
+        <div class="card shadow-sm border-primary h-100" [appHighlightStatus]="irrigation?.status || 'OK'">
+          <div class="card-header bg-primary text-white">💧 Irrigation Status</div>
+          <div class="card-body">
+            <div *ngIf="irrigation?.status === 'WARNING'" class="alert alert-warning" role="alert">
+              ⚠️ Irrigation Warning: Soil moisture is below safe threshold.
+            </div>
+
+            @if (irrigation) {
+              <p class="mb-2">
+                <strong>Status:</strong>
+                <span class="badge ms-2"
+                  [appHighlightStatus]="irrigation.status"
+                  [class.bg-danger]="irrigation.status === 'WARNING'"
+                  [class.bg-success]="irrigation.status === 'OK'">
+                  {{ irrigation.status }}
+                </span>
+              </p>
+              <p class="mb-0">
+                <strong>Soil Moisture:</strong> {{ irrigation.moisture }}%
+              </p>
+            } @else {
+              <p class="text-muted mb-0">
+                No soil moisture sensor found. Add a sensor of type
+                <code>Soil Moisture</code> below.
+              </p>
+            }
+          </div>
+        </div>
+      </div>
+
+      <!-- Sensors -->
+      <div class="col-12">
+        <div class="card shadow-sm">
+          <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+            <span>📡 Sensors ({{ farm.sensors?.length || 0 }})</span>
+            <button class="btn btn-light btn-sm"
+              (click)="showSensorForm = !showSensorForm">
+              {{ showSensorForm ? 'Cancel' : '+ Add Sensor' }}
+            </button>
+          </div>
+
+          <div class="card-body">
+
+            @if (showSensorForm) {
+              <div class="row g-2 mb-4 p-3 bg-light rounded">
+                <h6 class="text-secondary mb-2">New Sensor</h6>
+                <div class="col-md-4">
+                  <input type="text" class="form-control form-control-sm"
+                    placeholder="Sensor ID (e.g. S001)"
+                    [(ngModel)]="newSensor.sensor_id" />
+                </div>
+                <div class="col-md-4">
+                  <input type="text" class="form-control form-control-sm"
+                    placeholder="Type (e.g. Soil Moisture)"
+                    [(ngModel)]="newSensor.type" />
+                </div>
+                <div class="col-md-4">
+                  <button class="btn btn-success btn-sm w-100" (click)="addSensor()">
+                    Save Sensor
+                  </button>
+                </div>
+                @if (sensorMessage) {
+                  <div class="col-12">
+                    <small class="text-muted">{{ sensorMessage }}</small>
+                  </div>
+                }
+              </div>
+            }
+
+            @if (farm.sensors && farm.sensors.length > 0) {
+              <div class="row g-3">
+                @for (sensor of farm.sensors; track sensor.sensor_id) {
+                  <div class="col-md-4">
+                    <div class="card border-secondary h-100">
+                      <div class="card-body py-2">
+                        <h6 class="mb-1">{{ sensor.type }}</h6>
+                        <small class="text-muted d-block">ID: {{ sensor.sensor_id }}</small>
+                        <span class="badge mt-1"
+                          [class.bg-success]="sensor.status"
+                          [class.bg-secondary]="!sensor.status">
+                          {{ sensor.status ? 'Active' : 'Inactive' }}
+                        </span>
+                        @if (sensor.readings && sensor.readings.length > 0) {
+                          <p class="mb-0 mt-1 small">
+                            Last reading:
+                            <strong [appHighlightStatus]="sensor.readings[sensor.readings.length - 1].value">
+                              {{ sensor.readings[sensor.readings.length - 1].value }}
+                            </strong>
+                          </p>
+                        }
+                      </div>
+                    </div>
+                  </div>
+                }
+              </div>
+            } @else {
+              @if (!showSensorForm) {
+                <p class="text-muted mb-0">No sensors registered. Click "Add Sensor" above.</p>
+              }
+            }
+
+          </div>
+        </div>
+      </div>
+
+    </div>
+  }
+
+</div>

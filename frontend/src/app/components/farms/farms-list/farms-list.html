@@ -1,0 +1,224 @@
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2 class="text-success mb-0">🚜 {{ showMyFarms ? 'My Farms' : 'All Farms' }}</h2>
+    <div class="d-flex gap-2 flex-wrap">
+      <div class="btn-group" role="group" aria-label="Farm filter">
+        <button
+          type="button"
+          class="btn btn-sm"
+          [class.btn-success]="!showMyFarms"
+          [class.btn-outline-success]="showMyFarms"
+          (click)="showMyFarms && toggleMyFarms()"
+        >
+          All Farms
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm"
+          [class.btn-success]="showMyFarms"
+          [class.btn-outline-success]="!showMyFarms"
+          (click)="!showMyFarms && toggleMyFarms()"
+        >
+          My Farms
+        </button>
+      </div>
+      <a routerLink="/farms/new" class="btn btn-success btn-sm">+ Add New Farm</a>
+    </div>
+  </div>
+
+  <div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-5">
+          <label for="search" class="form-label fw-semibold">Search Farms</label>
+          <input
+            id="search"
+            type="text"
+            class="form-control"
+            placeholder="Search by name, crop, location..."
+            [(ngModel)]="query"
+            [disabled]="loading"
+            (keyup.enter)="onSearch()"
+          />
+        </div>
+        <div class="col-md-3">
+          <label for="sortBy" class="form-label fw-semibold">Sort By</label>
+          <select
+            id="sortBy"
+            class="form-select"
+            [(ngModel)]="sortBy"
+            (change)="onSortChange()"
+            [disabled]="loading"
+          >
+            <option value="name-asc">Name (A-Z)</option>
+            <option value="name-desc">Name (Z-A)</option>
+            <option value="crop-asc">Crop Type (A-Z)</option>
+            <option value="sensors-desc">Most Sensors</option>
+          </select>
+        </div>
+        <div class="col-md-4 d-flex gap-2">
+          <button type="button" class="btn btn-success" (click)="onSearch()" [disabled]="loading">
+            Search
+          </button>
+          <button type="button" class="btn btn-outline-secondary" (click)="clearSearch()" [disabled]="loading">
+            Clear
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  @if (loading) {
+    <div class="row">
+      @for (item of [1, 2, 3]; track $index) {
+        <div class="col-md-4 mb-4">
+          <div class="card skeleton skeleton-height border-0"></div>
+        </div>
+      }
+    </div>
+  }
+
+  @if (error) {
+    <div class="alert alert-danger shadow-sm">
+      ❌ {{ errorMessage }}
+    </div>
+  }
+
+  <div class="row">
+    @for (farm of farms; track farm._id) {
+      <div class="col-md-4 mb-4">
+        <div class="card shadow-sm border-success h-100">
+
+          <div class="card-body">
+            <h5 class="card-title text-success">{{ farm.farm_name }}</h5>
+            <h6 class="card-subtitle mb-3 text-muted">
+              🌾 Crop: {{ farm.crop_type || 'Not specified' }}
+            </h6>
+
+            <ul class="list-group list-group-flush mb-3">
+              <li class="list-group-item px-0">
+                <strong>⚠️ Alert Status:</strong>
+                @if (farm.alerts_history && farm.alerts_history.length > 0) {
+                  <span class="badge bg-danger ms-2">
+                    {{ farm.alerts_history[0].alert_type }} Alert
+                  </span>
+                } @else {
+                  <span class="badge bg-success ms-2">All Clear</span>
+                }
+              </li>
+              <li class="list-group-item px-0">
+                <strong>📡 Sensors:</strong>
+                <span class="badge bg-secondary ms-2">
+                  {{ farm.sensors?.length || 0 }} active
+                </span>
+              </li>
+            </ul>
+
+            @if (farm.sensors && farm.sensors.length > 0 && farm.sensors[0].readings && farm.sensors[0].readings.length > 0) {
+              @let latestReading = farm.sensors[0].readings[farm.sensors[0].readings.length - 1];
+              <div class="small text-muted">
+                Latest moisture reading:
+                <strong>{{ latestReading.value }}%</strong>
+                <span class="badge bg-light text-dark ms-2">
+                  {{ latestReading.value | sensorStatus }}
+                </span>
+              </div>
+            }
+          </div>
+
+          <div class="card-footer bg-white border-top-0">
+            <div class="d-grid gap-2">
+              <a class="btn btn-outline-success"
+                [routerLink]="['/farms', farm._id]">
+                View Full Dashboard →
+              </a>
+              @if (authService.currentUserSignal()?._id === farm.owner_id || authService.currentUserSignal()?.role === 'admin') {
+                <a class="btn btn-outline-primary btn-sm"
+                  [routerLink]="['/farms', farm._id, 'edit']">
+                  ✏️ Edit Farm
+                </a>
+              }
+              @if (authService.currentUserSignal()?.role === 'admin') {
+                <button
+                  type="button"
+                  class="btn btn-outline-danger btn-sm"
+                  (click)="deleteFarm(farm)"
+                  [disabled]="deletingFarmId === farm._id"
+                >
+                  @if (deletingFarmId === farm._id) {
+                    <span class="spinner-border spinner-border-sm me-1"></span>
+                    Deleting...
+                  } @else {
+                    🗑️ Delete
+                  }
+                </button>
+              }
+            </div>
+          </div>
+
+        </div>
+      </div>
+    } @empty {
+      @if (!loading && !error) {
+        <div class="col-12">
+          <div class="card border-0 shadow-sm text-center py-5">
+            <div class="card-body">
+              <div class="empty-state-icon">
+                @if (query.trim()) {
+                  🔍
+                } @else {
+                  🚜
+                }
+              </div>
+              <h5 class="card-title text-muted">
+                @if (query.trim()) {
+                  No farms found for "{{ query }}"
+                } @else {
+                  No farms registered yet
+                }
+              </h5>
+              <p class="card-text text-muted small mb-3">
+                @if (query.trim()) {
+                  Try adjusting your search filters or create a new farm
+                } @else {
+                  Get started by adding your first farm to begin monitoring
+                }
+              </p>
+              @if (!query.trim()) {
+                <a routerLink="/farms/new" class="btn btn-success btn-sm">
+                  + Create Your First Farm
+                </a>
+              }
+            </div>
+          </div>
+        </div>
+      }
+    }
+  </div>
+
+  @if (!loading && !query.trim()) {
+    <div class="d-flex justify-content-between align-items-center mt-4">
+      <div class="text-muted small">
+        Page {{ page }} | Total farms: {{ totalFarms }}
+      </div>
+      <div class="btn-group">
+        <button
+          type="button"
+          class="btn btn-outline-success"
+          (click)="previousPage()"
+          [disabled]="page <= 1 || loading"
+        >
+          ← Previous
+        </button>
+        <button
+          type="button"
+          class="btn btn-outline-success"
+          (click)="nextPage()"
+          [disabled]="!hasNext || loading"
+        >
+          Next →
+        </button>
+      </div>
+    </div>
+  }
+</div>

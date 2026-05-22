@@ -1,0 +1,109 @@
+<div class="container mt-4">
+  <div class="card shadow-sm border-0 mx-auto" style="max-width: 500px;">
+    <div class="card-header bg-success text-white d-flex align-items-center gap-2">
+      <span style="font-size: 1.5rem;">🌾</span>
+      <h5 class="mb-0">Create Account</h5>
+    </div>
+
+    <div class="card-body p-4">
+      @if (successMessage) {
+        <div class="alert alert-success d-flex align-items-center gap-2" role="status">
+          <span style="font-size: 1.5rem;">✅</span>
+          <div>
+            <strong>{{ successMessage }}</strong>
+            <p class="mb-0 small text-muted">Redirecting to login...</p>
+          </div>
+        </div>
+      }
+
+      @if (errorMessage) {
+        <div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
+          <span style="font-size: 1.5rem;">❌</span>
+          <div>{{ errorMessage }}</div>
+        </div>
+      }
+
+      <form [formGroup]="registerForm" (ngSubmit)="onRegister()" novalidate>
+        <div class="mb-3">
+          <label for="username" class="form-label fw-semibold">Username</label>
+          <input
+            id="username"
+            type="text"
+            class="form-control"
+            formControlName="username"
+            placeholder="e.g. john_doe"
+            [disabled]="loading"
+          />
+          @if (registerForm.controls.username.touched && registerForm.controls.username.invalid) {
+            <div class="text-danger small mt-1">Username is required (3-32 characters).</div>
+          }
+        </div>
+
+        <div class="mb-3">
+          <label for="email" class="form-label fw-semibold">Email</label>
+          <input
+            id="email"
+            type="email"
+            class="form-control"
+            formControlName="email"
+            placeholder="e.g. john@example.com"
+            [disabled]="loading"
+          />
+          @if (registerForm.controls.email.touched && registerForm.controls.email.invalid) {
+            <div class="text-danger small mt-1">Valid email is required.</div>
+          }
+        </div>
+
+        <div class="mb-3">
+          <label for="password" class="form-label fw-semibold">Password</label>
+          <input
+            id="password"
+            type="password"
+            class="form-control"
+            formControlName="password"
+            placeholder="Minimum 8 characters"
+            [disabled]="loading"
+          />
+          @if (registerForm.controls.password.touched && registerForm.controls.password.invalid) {
+            <div class="text-danger small mt-1">Password must be at least 8 characters.</div>
+          }
+        </div>
+
+        <div class="mb-4">
+          <label for="confirmPassword" class="form-label fw-semibold">Confirm Password</label>
+          <input
+            id="confirmPassword"
+            type="password"
+            class="form-control"
+            formControlName="confirmPassword"
+            placeholder="Re-enter your password"
+            [disabled]="loading"
+          />
+          @if (registerForm.get('confirmPassword')?.touched && registerForm.hasError('passwordMismatch')) {
+            <div class="text-danger small mt-1">Passwords do not match.</div>
+          }
+        </div>
+
+        <button 
+          type="submit" 
+          class="btn btn-success w-100 fw-semibold"
+          [disabled]="registerForm.invalid || loading"
+        >
+          @if (loading) {
+            <span class="spinner-border spinner-border-sm me-2"></span>
+            Creating Account...
+          } @else {
+            ✏️ Create Account
+          }
+        </button>
+      </form>
+
+      <div class="text-center mt-3">
+        <p class="text-muted mb-0">
+          Already have an account?
+          <a routerLink="/login" class="text-success fw-semibold">Login here</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>

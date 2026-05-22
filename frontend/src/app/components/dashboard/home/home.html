@@ -1,0 +1,52 @@
+<div class="container mt-5">
+  <div class="glass-card text-center py-5 px-4 mb-5 shadow">
+    <h1 class="display-4 text-success fw-bold mb-3">Welcome back, {{ greetingName }}! 👋</h1>
+
+    <div class="mb-4">
+      @if (isLoadingStats) {
+        <span class="badge rounded-pill quick-stats-badge bg-secondary-subtle text-dark border border-secondary-subtle px-4 py-2 shadow-sm">
+          ⏳ Loading quick stats...
+        </span>
+      } @else {
+        <span class="badge rounded-pill quick-stats-badge bg-success-subtle text-success-emphasis border border-success-subtle px-4 py-2 shadow-sm">
+          📌 Quick Stats: {{ totalFarms }} farms currently tracked
+        </span>
+      }
+    </div>
+
+    <p class="lead text-dark mt-3 mb-4 fw-medium">
+      Monitor your agricultural assets, track live weather conditions, manage IoT sensors, 
+      and receive real-time disaster alerts from one unified dashboard.
+    </p>
+
+    <div class="d-flex justify-content-center gap-3 flex-wrap mt-4">
+      <a routerLink="/farms" class="btn btn-success btn-lg shadow px-5 rounded-pill">View All Farms</a>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-5">
+    <div class="col-md-4">
+      <div class="glass-card p-4 h-100 border-0 text-center feature-card">
+        <div class="display-4 mb-3">📈</div>
+        <h5 class="text-success fw-bold">Farm Performance</h5>
+        <p class="text-muted mb-0 small">Get instant visibility into your monitored farm activity.</p>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="glass-card p-4 h-100 border-0 text-center feature-card">
+        <div class="display-4 mb-3">📡</div>
+        <h5 class="text-success fw-bold">IoT Sensors</h5>
+        <p class="text-muted mb-0 small">Monitor soil and crop health 24/7.</p>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="glass-card p-4 h-100 border-0 text-center feature-card">
+        <div class="display-4 mb-3">🚨</div>
+        <h5 class="text-success fw-bold">Geo-Alerts</h5>
+        <p class="text-muted mb-0 small">Receive targeted disaster warnings.</p>
+      </div>
+    </div>
+  </div>
+</div>

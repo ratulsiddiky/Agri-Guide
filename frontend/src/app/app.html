@@ -1,0 +1,46 @@
+<nav class="navbar navbar-expand-lg navbar-dark site-navbar mb-4">
+  <div class="container">
+    <a class="navbar-brand fw-bold" routerLink="/">SmartAgri Guide</a>
+
+    <button
+      class="navbar-toggler"
+      type="button"
+      aria-label="Toggle navigation"
+      title="Toggle navigation"
+      data-bs-toggle="collapse"
+      data-bs-target="#navbarNav"
+    >
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <div class="navbar-nav ms-auto align-items-lg-center flex-wrap gap-0 gap-lg-2">
+        <a class="nav-link" routerLink="/">Home</a>
+        <a class="nav-link" routerLink="/farms">All Farms</a>
+        @if (auth.isLoggedIn() && auth.getRole() === 'admin') {
+          <a class="nav-link" routerLink="/admin">Admin Dashboard</a>
+        }
+        @if (!auth.isLoggedIn()) {
+          <a class="nav-link" routerLink="/login">Login</a>
+        }
+        @if (auth.isLoggedIn()) {
+          <span class="nav-link text-warning fw-semibold">User {{ auth.getUsername() }}</span>
+          <button class="btn btn-outline-light btn-sm ms-lg-2" (click)="logout()">Logout</button>
+        }
+      </div>
+    </div>
+  </div>
+</nav>
+
+<app-global-alert></app-global-alert>
+
+<main class="container app-shell">
+  <router-outlet></router-outlet>
+</main>
+
+<footer class="site-footer mt-5">
+  <div class="container py-3 d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
+    <span class="fw-semibold">SmartAgri Guide</span>
+    <span class="small">Agricultural insight, weather, and farm management in one place.</span>
+  </div>
+</footer>
