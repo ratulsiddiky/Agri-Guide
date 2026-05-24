@@ -26,9 +26,11 @@ def create_app():
 
     from blueprints.auth.auth import auth_bp
     from blueprints.farms.farms import farms_bp
+    from blueprints.smart_routes import smart_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(farms_bp)
+    app.register_blueprint(smart_bp)
 
     @app.route("/", methods=["GET"])
     def home():
