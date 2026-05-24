@@ -1,52 +1,82 @@
-<div class="container mt-5">
-  <div class="glass-card text-center py-5 px-4 mb-5 shadow">
-    <h1 class="display-4 text-success fw-bold mb-3">Welcome back, {{ greetingName }}! 👋</h1>
-
-    <div class="mb-4">
-      @if (isLoadingStats) {
-        <span class="badge rounded-pill quick-stats-badge bg-secondary-subtle text-dark border border-secondary-subtle px-4 py-2 shadow-sm">
-          ⏳ Loading quick stats...
-        </span>
-      } @else {
-        <span class="badge rounded-pill quick-stats-badge bg-success-subtle text-success-emphasis border border-success-subtle px-4 py-2 shadow-sm">
-          📌 Quick Stats: {{ totalFarms }} farms currently tracked
-        </span>
-      }
+<main class="smart-dashboard">
+  <section class="welcome-hero">
+    <div>
+      <p class="eyebrow">Agri Guide</p>
+      <h1>Good morning, Farmer John! 🌱</h1>
+      <p class="hero-subtitle">Here is an overview of your farms and current conditions.</p>
     </div>
 
-    <p class="lead text-dark mt-3 mb-4 fw-medium">
-      Monitor your agricultural assets, track live weather conditions, manage IoT sensors, 
-      and receive real-time disaster alerts from one unified dashboard.
-    </p>
+    <a routerLink="/farms" class="hero-action">View Farms</a>
+  </section>
 
-    <div class="d-flex justify-content-center gap-3 flex-wrap mt-4">
-      <a routerLink="/farms" class="btn btn-success btn-lg shadow px-5 rounded-pill">View All Farms</a>
+  <section class="kpi-grid" aria-label="Farm overview">
+    @for (card of dashboardKpiCards; track card.label) {
+      <article class="dashboard-card kpi-card" [ngClass]="'tone-' + card.tone">
+        <p>{{ card.label }}</p>
+        <strong>{{ card.value }}</strong>
+        <span>{{ card.detail }}</span>
+      </article>
+    }
+  </section>
+
+  <section class="section-heading">
+    <div>
+      <p class="eyebrow">Live Intelligence</p>
+      <h2>Smart agriculture controls</h2>
     </div>
-  </div>
+  </section>
 
-  <div class="row g-3 mb-5">
-    <div class="col-md-4">
-      <div class="glass-card p-4 h-100 border-0 text-center feature-card">
-        <div class="display-4 mb-3">📈</div>
-        <h5 class="text-success fw-bold">Farm Performance</h5>
-        <p class="text-muted mb-0 small">Get instant visibility into your monitored farm activity.</p>
+  <section class="feature-grid" aria-label="Smart agriculture insights">
+    @for (card of smartFeatureCards; track card.title) {
+      <article class="dashboard-card feature-card" [ngClass]="'accent-' + card.accent">
+        <div class="card-header">
+          <h3>{{ card.title }}</h3>
+          <span class="status-dot"></span>
+        </div>
+
+        <dl>
+          @for (metric of card.metrics; track metric.label) {
+            <div>
+              <dt>{{ metric.label }}</dt>
+              <dd>{{ metric.value }}</dd>
+            </div>
+          }
+        </dl>
+      </article>
+    }
+  </section>
+
+  <section class="dashboard-card table-card">
+    <div class="table-title">
+      <div>
+        <p class="eyebrow">Recent Activity</p>
+        <h2>Recent sensor readings</h2>
       </div>
     </div>
 
-    <div class="col-md-4">
-      <div class="glass-card p-4 h-100 border-0 text-center feature-card">
-        <div class="display-4 mb-3">📡</div>
-        <h5 class="text-success fw-bold">IoT Sensors</h5>
-        <p class="text-muted mb-0 small">Monitor soil and crop health 24/7.</p>
-      </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Sensor</th>
+            <th>Farm</th>
+            <th>Type</th>
+            <th>Value</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of sensorRows; track row.sensor) {
+            <tr>
+              <td>{{ row.sensor }}</td>
+              <td>{{ row.farm }}</td>
+              <td>{{ row.type }}</td>
+              <td>{{ row.value }}</td>
+              <td><span class="reading-status">{{ row.status }}</span></td>
+            </tr>
+          }
+        </tbody>
+      </table>
     </div>
-
-    <div class="col-md-4">
-      <div class="glass-card p-4 h-100 border-0 text-center feature-card">
-        <div class="display-4 mb-3">🚨</div>
-        <h5 class="text-success fw-bold">Geo-Alerts</h5>
-        <p class="text-muted mb-0 small">Receive targeted disaster warnings.</p>
-      </div>
-    </div>
-  </div>
-</div>
+  </section>
+</main>
