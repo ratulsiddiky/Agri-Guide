@@ -41,6 +41,84 @@ export interface RegionalInsightsResponse {
   };
 }
 
+export interface SystemMetricsResponse {
+  api_status: string;
+  database_status: string;
+  backend_latency_ms: number;
+  target_latency_ms: number;
+  ai_model_mode: string;
+  sensor_data_freshness_seconds: number;
+  uptime_percentage_target: string;
+  timestamp: string;
+}
+
+export interface LatestSensorsResponse {
+  farm_id: string;
+  temperature_c: number;
+  humidity_percent: number;
+  soil_moisture_percent: number;
+  light_lux: number;
+  source: string;
+  status: string;
+  timestamp: string;
+}
+
+export interface CropDetectionResponse {
+  mode: string;
+  model_type: string;
+  cnn_architecture_plan: {
+    baseline: string;
+    comparison_models: string[];
+    chosen_for_future_upgrade: string;
+    reason: string;
+  };
+  prediction: {
+    label: string;
+    confidence: number;
+    recommendation: string;
+  };
+  latency_requirement_ms: number;
+  timestamp: string;
+}
+
+export interface IrrigationDecisionResponse {
+  soil_moisture_percent: number;
+  temperature_c: number;
+  decision: string;
+  recommended_action: string;
+  priority: string;
+  rule_used: string;
+  timestamp: string;
+}
+
+export interface WeatherAlertResponse {
+  location: string;
+  alert_level: string;
+  message: string;
+  recommended_action: string;
+  mode: string;
+  timestamp: string;
+}
+
+export interface FailoverTestResponse {
+  sensor_status: string;
+  failover_mode: string;
+  logic: string;
+  last_valid_reading: {
+    sensor_id: string;
+    soil_moisture_percent: number;
+    timestamp: string;
+  };
+  interpolated_reading: {
+    sensor_id: string;
+    soil_moisture_percent: number;
+    method: string;
+    timestamp: string;
+  };
+  confidence: string;
+  alert: string;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -144,5 +222,29 @@ export class ApiService {
     return this.http.get<RegionalInsightsResponse>(
       `${this.baseUrl}/farms/region/${encodeURIComponent(regionName)}/insights`
     );
+  }
+
+  getSystemMetrics() {
+    return this.http.get<SystemMetricsResponse>(`${this.baseUrl}/system/metrics`);
+  }
+
+  getLatestSensors() {
+    return this.http.get<LatestSensorsResponse>(`${this.baseUrl}/sensors/latest`);
+  }
+
+  detectCropDisease() {
+    return this.http.post<CropDetectionResponse>(`${this.baseUrl}/ai/detect`, {});
+  }
+
+  getIrrigationDecision() {
+    return this.http.get<IrrigationDecisionResponse>(`${this.baseUrl}/irrigation/decision`);
+  }
+
+  getWeatherAlert() {
+    return this.http.get<WeatherAlertResponse>(`${this.baseUrl}/weather/alert`);
+  }
+
+  getFailoverTest() {
+    return this.http.get<FailoverTestResponse>(`${this.baseUrl}/sensors/failover-test`);
   }
 }
