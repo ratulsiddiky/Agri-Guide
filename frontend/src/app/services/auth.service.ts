@@ -1,8 +1,8 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
+import { catchError, finalize, tap } from 'rxjs/operators';
 import { User } from '../models/user.model';
 import { environment } from '../../environments/environment';
 
@@ -37,7 +37,7 @@ export class AuthService {
     private readonly router: Router
   ) {}
 
-login(username: string, password: string): Observable<AuthResponse> {
+  login(username: string, password: string): Observable<AuthResponse> {
     const credentials = `${username}:${password}`;
     
     const safeBase64 = btoa(
@@ -72,7 +72,10 @@ login(username: string, password: string): Observable<AuthResponse> {
   logout() {
     return this.http
       .get(`${this.baseUrl}/logout`)
-      .pipe(tap(() => this.clearSession()));
+      .pipe(
+        catchError(() => of(null)),
+        finalize(() => this.clearSession())
+      );
   }
 
   isAuthenticated(): boolean {
