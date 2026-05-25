@@ -13,6 +13,10 @@ def _as_bool(value, default=False):
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _csv_values(value):
+    return [item.strip() for item in str(value or "").split(",") if item.strip()]
+
+
 class Config:
     _TESTING_CONTEXT = _as_bool(os.getenv("FLASK_TESTING"), default=False) or bool(
         os.getenv("PYTEST_CURRENT_TEST")
@@ -21,10 +25,16 @@ class Config:
     SECRET_KEY = os.getenv("SECRET_KEY") or ("test_secret" if _TESTING_CONTEXT else None)
     MONGO_URI = os.getenv("MONGO_URI") or ("mongodb://127.0.0.1:27017" if _TESTING_CONTEXT else None)
     MONGO_DB_NAME = os.getenv("MONGO_DB_NAME") or ("smart_agri_db" if _TESTING_CONTEXT else None)
+    FLASK_ENV = os.getenv("FLASK_ENV", "development")
     HOST = os.getenv("FLASK_HOST", "127.0.0.1")
     PORT = int(os.getenv("FLASK_PORT", "5001"))
-    DEBUG = _as_bool(os.getenv("FLASK_DEBUG"), default=True)
+    DEBUG = _as_bool(os.getenv("FLASK_DEBUG"), default=FLASK_ENV != "production")
     TESTING = _as_bool(os.getenv("FLASK_TESTING"), default=False)
+    CORS_ORIGINS = [
+        "http://localhost:4200",
+        "http://127.0.0.1:4200",
+        *_csv_values(os.getenv("FRONTEND_ORIGIN")),
+    ]
 
     EMAIL_ENABLED = _as_bool(os.getenv("EMAIL_ENABLED"), default=False)
     SMTP_HOST = os.getenv("SMTP_HOST")

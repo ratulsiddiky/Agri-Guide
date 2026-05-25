@@ -1,5 +1,5 @@
 export const environment = {
   production: true,
-  apiBaseUrl: 'https://your-production-api.example.com/api',
+  apiBaseUrl: 'https://your-agri-guide-api.azurewebsites.net/api',
 };
 

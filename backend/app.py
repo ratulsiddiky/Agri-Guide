@@ -12,7 +12,7 @@ def create_app():
         app,
         resources={
             r"/*": {
-                "origins": ["http://localhost:4200", "http://127.0.0.1:4200"],
+                "origins": Config.CORS_ORIGINS,
                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
                 "allow_headers": ["Content-Type", "Authorization"],
                 "supports_credentials": True,
