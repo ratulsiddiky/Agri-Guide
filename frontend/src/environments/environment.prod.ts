@@ -1,5 +1,4 @@
 export const environment = {
   production: true,
-  apiBaseUrl: 'https://your-agri-guide-api.azurewebsites.net/api',
+  apiBaseUrl: 'https://agri-guide-api-arfsfpgxfnepb3dd.spaincentral-01.azurewebsites.net/api',
 };
-
