@@ -106,10 +106,18 @@ def verify_email():
 @limiter.limit("10 per minute")
 def login():
     auth = request.authorization
-    if not auth or not auth.username or not auth.password:
+    if auth:
+        username = auth.username.strip() if auth.username else ""
+        password = auth.password
+    else:
+        payload = request.get_json(silent=True) or {}
+        username = str(payload.get("username", "")).strip()
+        password = payload.get("password")
+
+    if not username or not password:
         return make_response(jsonify({"message": "Missing username or password"}), 401)
 
-    user = config.get_db().users.find_one({"username": auth.username})
+    user = config.get_db().users.find_one({"username": username})
     if not user:
         return make_response(jsonify({"message": "User not found"}), 404)
 
@@ -119,10 +127,16 @@ def login():
             403,
         )
 
-    if not bcrypt.checkpw(
-        auth.password.encode("utf-8"),
-        user["password"].encode("utf-8"),
-    ):
+    stored_password = user.get("password")
+    try:
+        password_valid = bcrypt.checkpw(
+            str(password).encode("utf-8"),
+            stored_password.encode("utf-8"),
+        )
+    except (AttributeError, TypeError, ValueError):
+        password_valid = False
+
+    if not password_valid:
         return make_response(jsonify({"message": "Incorrect password"}), 401)
 
     token = jwt.encode(

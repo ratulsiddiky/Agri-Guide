@@ -14,9 +14,21 @@ def create_app():
             r"/*": {
                 "origins": Config.CORS_ORIGINS,
                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-                "allow_headers": ["Content-Type", "Authorization"],
+                "allow_headers": [
+                    "Content-Type",
+                    "Authorization",
+                    "Accept",
+                    "Origin",
+                    "X-Requested-With",
+                ],
                 "supports_credentials": True,
-                "expose_headers": ["Content-Type", "Authorization"],
+                "expose_headers": [
+                    "Content-Type",
+                    "Authorization",
+                    "Accept",
+                    "Origin",
+                    "X-Requested-With",
+                ],
                 "max_age": 3600,
             }
         },

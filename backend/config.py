@@ -17,6 +17,10 @@ def _csv_values(value):
     return [item.strip() for item in str(value or "").split(",") if item.strip()]
 
 
+def _cors_origin_values(value):
+    return [origin for origin in _csv_values(value) if origin != "*"]
+
+
 class Config:
     _TESTING_CONTEXT = _as_bool(os.getenv("FLASK_TESTING"), default=False) or bool(
         os.getenv("PYTEST_CURRENT_TEST")
@@ -33,7 +37,8 @@ class Config:
     CORS_ORIGINS = [
         "http://localhost:4200",
         "http://127.0.0.1:4200",
-        *_csv_values(os.getenv("FRONTEND_ORIGIN")),
+        "https://agri-guide-seven.vercel.app",
+        *_cors_origin_values(os.getenv("FRONTEND_ORIGIN")),
     ]
 
     EMAIL_ENABLED = _as_bool(os.getenv("EMAIL_ENABLED"), default=False)

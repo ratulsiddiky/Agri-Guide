@@ -28,6 +28,19 @@ def _basic_auth(username, password):
     return {"Authorization": f"Basic {token}"}
 
 
+def _insert_verified_user(username="farmer_one", password_text="Password123!"):
+    password = bcrypt.hashpw(password_text.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    config.get_db().users.insert_one(
+        {
+            "username": username,
+            "email": f"{username}@example.com",
+            "password": password,
+            "role": "user",
+            "is_verified": True,
+        }
+    )
+
+
 def test_signup_creates_user(client):
     response = client.post(
         "/api/users/signup",
@@ -40,6 +53,77 @@ def test_signup_creates_user(client):
 
     assert response.status_code == 201
     assert "Account created for new_farmer" in response.get_json()["message"]
+
+
+def test_basic_auth_login_works(client):
+    _insert_verified_user()
+
+    response = client.post(
+        "/api/login",
+        headers=_basic_auth("farmer_one", "Password123!"),
+    )
+
+    body = response.get_json()
+    assert response.status_code == 200
+    assert body["message"] == "Login successful!"
+    assert body["token"]
+    assert body["username"] == "farmer_one"
+    assert body["role"] == "user"
+    assert body["user_id"]
+
+
+def test_json_login_works(client):
+    _insert_verified_user()
+
+    response = client.post(
+        "/api/login",
+        json={"username": " farmer_one ", "password": "Password123!"},
+    )
+
+    body = response.get_json()
+    assert response.status_code == 200
+    assert body["message"] == "Login successful!"
+    assert body["token"]
+    assert body["username"] == "farmer_one"
+    assert body["role"] == "user"
+    assert body["user_id"]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"username": "farmer_one"},
+        {"password": "Password123!"},
+        {"username": "   ", "password": "Password123!"},
+        {"username": "farmer_one", "password": ""},
+    ],
+)
+def test_login_missing_username_or_password_returns_401(client, payload):
+    response = client.post("/api/login", json=payload)
+
+    assert response.status_code == 401
+    assert response.get_json()["message"] == "Missing username or password"
+
+
+def test_login_handles_malformed_password_hash(client):
+    config.get_db().users.insert_one(
+        {
+            "username": "farmer_one",
+            "email": "farmer_one@example.com",
+            "password": "not-a-bcrypt-hash",
+            "role": "user",
+            "is_verified": True,
+        }
+    )
+
+    response = client.post(
+        "/api/login",
+        json={"username": "farmer_one", "password": "Password123!"},
+    )
+
+    assert response.status_code == 401
+    assert response.get_json()["message"] == "Incorrect password"
 
 
 def test_login_requires_verified_user(client):
