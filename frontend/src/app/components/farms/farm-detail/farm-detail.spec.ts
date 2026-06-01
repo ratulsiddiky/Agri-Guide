@@ -32,6 +32,24 @@ describe('FarmDetail', () => {
           },
           data_source: 'stored_sensor_readings',
         } as never),
+      getFarmWeather: () =>
+        of({
+          farm_id: 'farm-1',
+          farm_name: 'North Field',
+          latitude: 54.5973,
+          longitude: -5.9301,
+          location_source: 'stored_coordinates',
+          temperature_c: 18,
+          humidity_percent: 70,
+          wind_speed_kmh: 12,
+          precipitation_mm: 0,
+          rain_mm: 0,
+          weather_code: 2,
+          condition_summary: 'Partly cloudy',
+          timestamp: '2026-06-01T10:00',
+          provider: 'Open-Meteo',
+          data_source: 'open_meteo_current_weather',
+        } as never),
       generateDemoSensors: () => of({ count: 5, sensors: [] } as never),
       syncWeather: (id: string) => {
         syncWeatherCalledWith = id;

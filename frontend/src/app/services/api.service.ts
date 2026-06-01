@@ -94,6 +94,24 @@ export interface SensorHistoryResponse {
   data_source: 'stored_sensor_readings' | 'simulated_from_latest';
 }
 
+export interface FarmWeatherResponse {
+  farm_id: string;
+  farm_name: string;
+  latitude: number;
+  longitude: number;
+  location_source: 'stored_coordinates' | 'approximate_demo_location';
+  temperature_c: number | null;
+  humidity_percent: number | null;
+  wind_speed_kmh: number | null;
+  precipitation_mm: number | null;
+  rain_mm: number | null;
+  weather_code: number | null;
+  condition_summary: string;
+  timestamp: string;
+  provider: 'Open-Meteo';
+  data_source: 'open_meteo_current_weather' | 'fallback_simulated_weather';
+}
+
 export interface CropDetectionResponse {
   mode: string;
   model_type: string;
@@ -257,6 +275,10 @@ export class ApiService {
 
   getSensorHistory(id: string) {
     return this.http.get<SensorHistoryResponse>(`${this.baseUrl}/farms/${id}/sensor-history`);
+  }
+
+  getFarmWeather(id: string) {
+    return this.http.get<FarmWeatherResponse>(`${this.baseUrl}/farms/${id}/weather`);
   }
 
   broadcastAlert(payload: BroadcastAlertRequest) {

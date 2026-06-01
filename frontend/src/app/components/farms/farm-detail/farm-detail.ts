@@ -26,7 +26,7 @@ import {
   Filler,
 } from 'chart.js';
 import { Farm, FarmSensor } from '../../../models/farm.model';
-import { ApiService, SensorHistoryResponse } from '../../../services/api.service';
+import { ApiService, FarmWeatherResponse, SensorHistoryResponse } from '../../../services/api.service';
 import { FarmService } from '../../../services/farm.service';
 import { HighlightStatusDirective } from '../../../directives/highlight-status.directive';
 
@@ -64,6 +64,7 @@ export class FarmDetail implements OnInit, AfterViewInit, OnDestroy {
   insights: FarmInsights | null = null;
   irrigation: IrrigationStatus | null = null;
   sensorHistory: SensorHistoryResponse | null = null;
+  farmWeather: FarmWeatherResponse | null = null;
   loading = true;
   error = false;
   errorMessage = '';
@@ -138,6 +139,9 @@ export class FarmDetail implements OnInit, AfterViewInit, OnDestroy {
       sensorHistory: this.farmService.getSensorHistory(this.farmId).pipe(
         catchError(() => of(null))
       ),
+      weather: this.farmService.getFarmWeather(this.farmId).pipe(
+        catchError(() => of(null))
+      ),
     })
     .pipe(takeUntil(this.destroy$))
     .subscribe({
@@ -146,6 +150,7 @@ export class FarmDetail implements OnInit, AfterViewInit, OnDestroy {
         this.insights = data.insights?.dashboard_data as FarmInsights | null;
         this.irrigation = data.irrigation as IrrigationStatus;
         this.sensorHistory = data.sensorHistory as SensorHistoryResponse | null;
+        this.farmWeather = data.weather as FarmWeatherResponse | null;
         this.chartMessage = this.sensorHistory?.data_source === 'simulated_from_latest'
           ? 'Showing simulated trend data from current sensor values.'
           : '';
@@ -246,6 +251,24 @@ export class FarmDetail implements OnInit, AfterViewInit, OnDestroy {
     const unit = typeof sensor.unit === 'string' ? sensor.unit : '';
 
     return value === undefined || value === null ? 'No reading' : `${value}${unit}`;
+  }
+
+  weatherValue(value: number | null | undefined, unit: string): string {
+    return value === null || value === undefined ? 'N/A' : `${value}${unit}`;
+  }
+
+  get weatherSourceLabel(): string {
+    if (!this.farmWeather) {
+      return '';
+    }
+
+    if (this.farmWeather.data_source === 'fallback_simulated_weather') {
+      return 'Fallback simulated weather';
+    }
+
+    return this.farmWeather.location_source === 'approximate_demo_location'
+      ? 'Open-Meteo using approximate demo coordinates'
+      : 'Open-Meteo live weather';
   }
 
   private scheduleChartRender(): void {

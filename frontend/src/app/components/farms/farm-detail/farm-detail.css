@@ -1,3 +1,50 @@
+.live-weather-card:hover {
+  transform: none;
+}
+
+.weather-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.weather-main strong {
+  color: #075985;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.weather-main span {
+  color: #335f70;
+  font-weight: 700;
+  text-align: right;
+}
+
+.weather-metric {
+  height: 100%;
+  padding: 0.7rem;
+  border: 1px solid rgba(14, 116, 144, 0.14);
+  border-radius: 10px;
+  background: rgba(240, 249, 255, 0.74);
+}
+
+.weather-metric span,
+.weather-metric strong {
+  display: block;
+}
+
+.weather-metric span {
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.weather-metric strong {
+  color: #0f172a;
+  margin-top: 0.2rem;
+}
+
 .sensor-trends-card {
   overflow: hidden;
 }

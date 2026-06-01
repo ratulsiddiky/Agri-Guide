@@ -124,6 +124,66 @@
         </div>
       </div>
 
+      <!-- Live Weather -->
+      <div class="col-md-6">
+        <div class="card shadow-sm border-info h-100 live-weather-card">
+          <div class="card-header bg-info text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span>🌦️ Live Weather</span>
+            @if (farmWeather) {
+              <span class="badge bg-light text-info">{{ farmWeather.provider }}</span>
+            }
+          </div>
+          <div class="card-body">
+            @if (farmWeather) {
+              <div class="weather-main mb-3">
+                <strong>{{ weatherValue(farmWeather.temperature_c, '°C') }}</strong>
+                <span>{{ farmWeather.condition_summary }}</span>
+              </div>
+
+              <div class="row g-2 mb-3">
+                <div class="col-6">
+                  <div class="weather-metric">
+                    <span>Humidity</span>
+                    <strong>{{ weatherValue(farmWeather.humidity_percent, '%') }}</strong>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="weather-metric">
+                    <span>Wind</span>
+                    <strong>{{ weatherValue(farmWeather.wind_speed_kmh, ' km/h') }}</strong>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="weather-metric">
+                    <span>Precipitation</span>
+                    <strong>{{ weatherValue(farmWeather.precipitation_mm, ' mm') }}</strong>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="weather-metric">
+                    <span>Rain</span>
+                    <strong>{{ weatherValue(farmWeather.rain_mm, ' mm') }}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <p class="text-muted small mb-1">{{ weatherSourceLabel }}</p>
+              @if (farmWeather.location_source === 'approximate_demo_location') {
+                <p class="text-warning small fw-semibold mb-1">Using approximate demo coordinates.</p>
+              }
+              @if (farmWeather.data_source === 'fallback_simulated_weather') {
+                <p class="text-warning small fw-semibold mb-1">Open-Meteo was unavailable; showing safe fallback data.</p>
+              }
+              <small class="text-muted">
+                Updated: {{ farmWeather.timestamp | date:'short' }}
+              </small>
+            } @else {
+              <p class="text-muted mb-0">Live weather is not available for this farm yet.</p>
+            }
+          </div>
+        </div>
+      </div>
+
       <!-- Irrigation -->
       <div class="col-md-6">
         <div class="card shadow-sm border-primary h-100" [appHighlightStatus]="irrigation?.status || 'OK'">

@@ -425,3 +425,123 @@ def test_sensor_history_endpoint_blocks_other_users(client):
     )
 
     assert response.status_code == 403
+
+
+def test_farm_weather_endpoint_works_for_owner(client, monkeypatch):
+    token = _login_token(client)
+    owner = config.get_db().users.find_one({"username": "farmer_one"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {
+                "farm_name": "Weather Detail Farm",
+                "owner_id": owner["_id"],
+                "latitude": 54.5973,
+                "longitude": -5.9301,
+                "sensors": [],
+                "weather_logs": [],
+                "alerts_history": [],
+            }
+        ).inserted_id
+    )
+
+    class _FakeWeatherResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "current": {
+                    "time": "2026-06-01T10:00",
+                    "temperature_2m": 18.7,
+                    "relative_humidity_2m": 72,
+                    "wind_speed_10m": 14.2,
+                    "precipitation": 0.1,
+                    "rain": 0.0,
+                    "weather_code": 2,
+                }
+            }
+
+    monkeypatch.setattr(farms_routes.requests, "get", lambda *args, **kwargs: _FakeWeatherResponse())
+
+    response = client.get(
+        f"/api/farms/{farm_id}/weather",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["farm_id"] == farm_id
+    assert payload["farm_name"] == "Weather Detail Farm"
+    assert payload["latitude"] == 54.5973
+    assert payload["longitude"] == -5.9301
+    assert payload["location_source"] == "stored_coordinates"
+    assert payload["temperature_c"] == 18.7
+    assert payload["humidity_percent"] == 72
+    assert payload["wind_speed_kmh"] == 14.2
+    assert payload["precipitation_mm"] == 0.1
+    assert payload["rain_mm"] == 0.0
+    assert payload["condition_summary"] == "Partly cloudy"
+    assert payload["provider"] == "Open-Meteo"
+    assert payload["data_source"] == "open_meteo_current_weather"
+
+
+def test_farm_weather_endpoint_blocks_other_users(client):
+    _login_token(client, username="owner_user")
+    intruder_token = _login_token(client, username="intruder_user")
+    owner = config.get_db().users.find_one({"username": "owner_user"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {
+                "farm_name": "Private Weather Farm",
+                "owner_id": owner["_id"],
+                "latitude": 54.5973,
+                "longitude": -5.9301,
+                "sensors": [],
+                "weather_logs": [],
+                "alerts_history": [],
+            }
+        ).inserted_id
+    )
+
+    response = client.get(
+        f"/api/farms/{farm_id}/weather",
+        headers={"Authorization": f"Bearer {intruder_token}"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_farm_weather_missing_coordinates_uses_fallback_safely(client, monkeypatch):
+    token = _login_token(client)
+    owner = config.get_db().users.find_one({"username": "farmer_one"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {
+                "farm_name": "Approx Weather Farm",
+                "owner_id": owner["_id"],
+                "address": {"area_name": "County Antrim"},
+                "sensors": [],
+                "weather_logs": [],
+                "alerts_history": [],
+            }
+        ).inserted_id
+    )
+
+    def _raise_request_error(*args, **kwargs):
+        raise farms_routes.requests.RequestException("Open-Meteo unavailable")
+
+    monkeypatch.setattr(farms_routes.requests, "get", _raise_request_error)
+
+    response = client.get(
+        f"/api/farms/{farm_id}/weather",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["farm_id"] == farm_id
+    assert payload["latitude"] == 54.5973
+    assert payload["longitude"] == -5.9301
+    assert payload["location_source"] == "approximate_demo_location"
+    assert payload["data_source"] == "fallback_simulated_weather"
+    assert payload["provider"] == "Open-Meteo"

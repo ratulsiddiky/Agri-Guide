@@ -247,6 +247,17 @@ export class FarmService {
     );
   }
 
+  getFarmWeather(id: string) {
+    return this.api.getFarmWeather(id).pipe(
+      catchError((error) =>
+        this.rethrowAsHttpError(
+          error,
+          `Unable to load live weather for farm '${id}'. Please try again.`
+        )
+      )
+    );
+  }
+
   /**
    * Sends an admin broadcast alert for farms inside the provided danger zone.
    */

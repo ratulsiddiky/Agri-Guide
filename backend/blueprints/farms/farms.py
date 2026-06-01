@@ -222,6 +222,102 @@ def _sensor_history_payload(farm):
     }
 
 
+def _to_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _farm_coordinates(farm):
+    latitude = _to_float(farm.get("latitude"))
+    longitude = _to_float(farm.get("longitude"))
+    if latitude is not None and longitude is not None:
+        return latitude, longitude, "stored_coordinates"
+
+    location = farm.get("location")
+    if isinstance(location, dict):
+        coordinates = location.get("coordinates", [])
+        if isinstance(coordinates, list) and len(coordinates) == 2:
+            longitude = _to_float(coordinates[0])
+            latitude = _to_float(coordinates[1])
+            if latitude is not None and longitude is not None:
+                return latitude, longitude, "stored_coordinates"
+
+    area_name = str(farm.get("address", {}).get("area_name", "")).lower()
+    if "london" in area_name:
+        return 51.5072, -0.1276, "approximate_demo_location"
+    return 54.5973, -5.9301, "approximate_demo_location"
+
+
+def _weather_condition_summary(weather_code):
+    summaries = {
+        0: "Clear sky",
+        1: "Mainly clear",
+        2: "Partly cloudy",
+        3: "Overcast",
+        45: "Fog",
+        48: "Depositing rime fog",
+        51: "Light drizzle",
+        53: "Moderate drizzle",
+        55: "Dense drizzle",
+        61: "Slight rain",
+        63: "Moderate rain",
+        65: "Heavy rain",
+        71: "Slight snow",
+        73: "Moderate snow",
+        75: "Heavy snow",
+        80: "Slight rain showers",
+        81: "Moderate rain showers",
+        82: "Violent rain showers",
+        95: "Thunderstorm",
+    }
+    return summaries.get(weather_code, "Weather conditions unavailable")
+
+
+def _fallback_weather_payload(farm, latitude, longitude, location_source):
+    weather_code = 2
+    return {
+        "farm_id": str(farm["_id"]),
+        "farm_name": farm.get("farm_name", "Farm"),
+        "latitude": latitude,
+        "longitude": longitude,
+        "location_source": location_source,
+        "temperature_c": 21.8,
+        "humidity_percent": 66,
+        "wind_speed_kmh": 12.4,
+        "precipitation_mm": 0.2,
+        "rain_mm": 0.0,
+        "weather_code": weather_code,
+        "condition_summary": _weather_condition_summary(weather_code),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "provider": "Open-Meteo",
+        "data_source": "fallback_simulated_weather",
+    }
+
+
+def _open_meteo_weather_payload(farm, latitude, longitude, location_source, weather_data):
+    current = weather_data.get("current", {})
+    weather_code = current.get("weather_code")
+    return {
+        "farm_id": str(farm["_id"]),
+        "farm_name": farm.get("farm_name", "Farm"),
+        "latitude": latitude,
+        "longitude": longitude,
+        "location_source": location_source,
+        "temperature_c": current.get("temperature_2m"),
+        "humidity_percent": current.get("relative_humidity_2m"),
+        "wind_speed_kmh": current.get("wind_speed_10m"),
+        "precipitation_mm": current.get("precipitation"),
+        "rain_mm": current.get("rain"),
+        "weather_code": weather_code,
+        "condition_summary": _weather_condition_summary(weather_code),
+        "timestamp": current.get("time") or datetime.now(timezone.utc).isoformat(),
+        "provider": "Open-Meteo",
+        "data_source": "open_meteo_current_weather",
+    }
+
+
 def get_farm_if_authorised(farm_id, current_user):
     """
     Fetch a farm and verify authorization in one database query.
@@ -623,6 +719,47 @@ def sync_weather(current_user, farm_id):
 
     _farms_collection().update_one({"_id": ObjectId(farm_id)}, {"$push": {"weather_logs": new_log}})
     return make_response(jsonify({"message": "Weather synced!", "new_log": new_log}), 200)
+
+
+@farms_bp.route("/api/farms/<farm_id>/weather", methods=["GET"])
+@jwt_required
+def get_farm_weather(current_user, farm_id):
+    farm, error_response = get_farm_if_authorised(farm_id, current_user)
+    if error_response:
+        return error_response
+
+    latitude, longitude, location_source = _farm_coordinates(farm)
+    weather_url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "current": ",".join(
+            [
+                "temperature_2m",
+                "relative_humidity_2m",
+                "precipitation",
+                "rain",
+                "weather_code",
+                "wind_speed_10m",
+            ]
+        ),
+        "timezone": "auto",
+    }
+
+    try:
+        response = requests.get(weather_url, params=params, timeout=4)
+        response.raise_for_status()
+        payload = _open_meteo_weather_payload(
+            farm,
+            latitude,
+            longitude,
+            location_source,
+            response.json(),
+        )
+    except requests.RequestException:
+        payload = _fallback_weather_payload(farm, latitude, longitude, location_source)
+
+    return make_response(jsonify(serialize_document(payload)), 200)
 
 
 @farms_bp.route("/api/farms/alerts/broadcast", methods=["POST"])
