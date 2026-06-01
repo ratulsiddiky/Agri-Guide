@@ -13,51 +13,11 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+import * as L from 'leaflet';
 import { FarmService } from '../../../services/farm.service';
 import { Farm } from '../../../models/farm.model';
 import { SensorStatusPipe } from '../../../pipes/sensor-status.pipe';
 import { AuthService } from '../../../services/auth.service';
-
-declare global {
-  interface Window {
-    L?: LeafletApi;
-  }
-}
-
-interface LeafletApi {
-  map: (element: HTMLElement, options?: Record<string, unknown>) => LeafletMap;
-  tileLayer: (urlTemplate: string, options?: Record<string, unknown>) => LeafletLayer;
-  marker: (latLng: [number, number]) => LeafletMarker;
-  featureGroup: (layers: LeafletMarker[]) => LeafletFeatureGroup;
-}
-
-interface LeafletMap {
-  setView: (center: [number, number], zoom: number) => LeafletMap;
-  remove: () => void;
-  eachLayer: (callback: (layer: LeafletLayer) => void) => void;
-  removeLayer: (layer: LeafletLayer) => void;
-  fitBounds: (bounds: unknown, options?: Record<string, unknown>) => void;
-  invalidateSize: () => void;
-  on: (eventName: string, handler: (event: LeafletPopupEvent) => void) => void;
-}
-
-interface LeafletLayer {
-  addTo: (map: LeafletMap) => LeafletLayer;
-}
-
-interface LeafletMarker extends LeafletLayer {
-  bindPopup: (content: string) => LeafletMarker;
-}
-
-interface LeafletFeatureGroup {
-  getBounds: () => unknown;
-}
-
-interface LeafletPopupEvent {
-  popup?: {
-    getElement: () => HTMLElement | null;
-  };
-}
 
 interface FarmMapPoint {
   farm: Farm;
@@ -94,8 +54,8 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
   showMyFarms = false;
   private mapReady = false;
   private mapDataLoaded = false;
-  private leafletMap: LeafletMap | null = null;
-  private markerLayers: LeafletMarker[] = [];
+  private leafletMap: L.Map | null = null;
+  private markerLayers: L.Marker[] = [];
   private mapResizeTimer: number | undefined;
   private destroy$ = new Subject<void>();
 
@@ -261,26 +221,21 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    const leaflet = window.L;
-    if (!leaflet) {
-      this.mapMessage = 'Map assets are still loading. Refresh if the map does not appear.';
-      this.cdr.markForCheck();
-      return;
-    }
+    this.configureLeafletMarkerIcons();
 
     if (!this.leafletMap) {
-      this.leafletMap = leaflet.map(this.farmMapElement.nativeElement, {
+      this.leafletMap = L.map(this.farmMapElement.nativeElement, {
         scrollWheelZoom: false,
       }).setView([54.6, -5.93], 6);
 
-      leaflet
+      L
         .tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; OpenStreetMap contributors',
           maxZoom: 19,
         })
         .addTo(this.leafletMap);
 
-      this.leafletMap.on('popupopen', (event) => {
+      this.leafletMap.on('popupopen', (event: L.PopupEvent) => {
         const button = event.popup?.getElement()?.querySelector<HTMLButtonElement>(
           '[data-farm-id]'
         );
@@ -298,15 +253,15 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
 
     const points = this.mapFarms.map((farm) => this.farmMapPoint(farm));
     const markers = points.map((point) =>
-      leaflet
+      L
         .marker([point.lat, point.lng])
         .bindPopup(this.markerPopup(point))
-        .addTo(this.leafletMap as LeafletMap) as LeafletMarker
+        .addTo(this.leafletMap as L.Map)
     );
     this.markerLayers = markers;
 
     if (markers.length > 0) {
-      this.leafletMap.fitBounds(leaflet.featureGroup(markers).getBounds(), {
+      this.leafletMap.fitBounds(L.featureGroup(markers).getBounds(), {
         padding: [24, 24],
         maxZoom: 11,
       });
@@ -316,6 +271,15 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
     }
 
     this.scheduleMapResize();
+  }
+
+
+  private configureLeafletMarkerIcons(): void {
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'assets/leaflet/marker-icon-2x.png',
+      iconUrl: 'assets/leaflet/marker-icon.png',
+      shadowUrl: 'assets/leaflet/marker-shadow.png',
+    });
   }
 
 
