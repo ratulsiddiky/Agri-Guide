@@ -10,6 +10,12 @@ export interface FarmAddress {
   [key: string]: unknown;
 }
 
+export interface FarmGeoLocation {
+  type?: string;
+  coordinates?: number[];
+  [key: string]: unknown;
+}
+
 export interface SensorReading {
   value?: string | number;
   [key: string]: unknown;
@@ -34,7 +40,7 @@ export interface Farm {
   _id?: string;
   name?: string;
   farm_name?: string;
-  location?: string;
+  location?: string | FarmGeoLocation;
   crop_type?: string;
   owner_id?: string;
   created_at?: string;

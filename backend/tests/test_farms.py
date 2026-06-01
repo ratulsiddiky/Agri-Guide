@@ -93,6 +93,27 @@ def test_create_farm_creates_default_sensors(client):
     assert 5.8 <= values_by_type["ph"] <= 7.2
 
 
+def test_create_farm_preserves_coordinates_when_provided(client):
+    token = _login_token(client)
+
+    response = client.post(
+        "/api/farms",
+        json={
+            "farm_name": "Map Farm",
+            "crop_type": "Barley",
+            "latitude": 54.5973,
+            "longitude": -5.9301,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 201
+    farm_id = response.get_json()["farm_id"]
+    farm = config.get_db().farms.find_one({"_id": ObjectId(farm_id)})
+    assert farm["latitude"] == 54.5973
+    assert farm["longitude"] == -5.9301
+
+
 def test_admin_can_delete_farm(client):
     token = _login_token(client, username="admin_user", role="admin")
     farm_id = str(

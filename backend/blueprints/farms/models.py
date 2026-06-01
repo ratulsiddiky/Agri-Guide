@@ -7,7 +7,14 @@ def validate_farm_payload(data, partial=False):
     if not isinstance(data, dict):
         return None, "Invalid JSON body."
 
-    allowed_fields = {"farm_name", "crop_type", "address", "location"}
+    allowed_fields = {
+        "farm_name",
+        "crop_type",
+        "address",
+        "location",
+        "latitude",
+        "longitude",
+    }
     if partial:
         updates = {key: value for key, value in data.items() if key in allowed_fields}
         if not updates:

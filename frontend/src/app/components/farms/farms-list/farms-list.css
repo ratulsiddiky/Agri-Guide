@@ -29,3 +29,61 @@
   min-height: 200px;
   border-radius: 12px;
 }
+
+.farm-map-card {
+  overflow: hidden;
+}
+
+.farm-map {
+  width: 100%;
+  min-height: 360px;
+  border: 1px solid rgba(22, 101, 52, 0.16);
+  border-radius: 14px;
+  overflow: hidden;
+  background: #e8f3ee;
+}
+
+.map-message {
+  color: #5f6f68;
+  font-size: 0.88rem;
+}
+
+:host ::ng-deep .farm-map-popup {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 170px;
+  color: #14342b;
+}
+
+:host ::ng-deep .farm-map-popup strong {
+  color: #166534;
+  font-size: 0.98rem;
+}
+
+:host ::ng-deep .farm-map-popup span,
+:host ::ng-deep .farm-map-popup-note {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+:host ::ng-deep .farm-map-popup-note {
+  color: #8a5a12;
+  font-weight: 700;
+}
+
+:host ::ng-deep .map-popup-link {
+  margin-top: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  border: 0;
+  border-radius: 999px;
+  background: #16a34a;
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+@media (max-width: 768px) {
+  .farm-map {
+    min-height: 300px;
+  }
+}

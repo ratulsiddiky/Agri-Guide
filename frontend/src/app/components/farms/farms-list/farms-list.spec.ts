@@ -4,6 +4,7 @@ import { provideRouter } from '@angular/router';
 
 import { FarmsList } from './farms-list';
 import { FarmService } from '../../../services/farm.service';
+import { AuthService } from '../../../services/auth.service';
 
 describe('FarmsList', () => {
   let component: FarmsList;
@@ -19,6 +20,11 @@ describe('FarmsList', () => {
           data: [],
           pagination: { page: 1, limit: 9, total: 0, has_next: false },
         }),
+      getMyFarms: () =>
+        of({
+          data: [],
+          pagination: { page: 1, limit: 100, total: 0, has_next: false },
+        }),
       searchFarms: () => of([]),
       deleteFarm: (id: string) => {
         deletedFarmId = id;
@@ -31,6 +37,12 @@ describe('FarmsList', () => {
       providers: [
         provideRouter([]),
         { provide: FarmService, useValue: farmServiceSpy },
+        {
+          provide: AuthService,
+          useValue: {
+            currentUserSignal: () => ({ _id: 'user-1', role: 'user' }),
+          },
+        },
       ],
     }).compileComponents();
 

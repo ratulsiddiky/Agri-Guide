@@ -1,13 +1,67 @@
-import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import {
+  AfterViewInit,
+  Component,
+  OnInit,
+  OnDestroy,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { FarmService } from '../../../services/farm.service';
 import { Farm } from '../../../models/farm.model';
 import { SensorStatusPipe } from '../../../pipes/sensor-status.pipe';
 import { AuthService } from '../../../services/auth.service';
+
+declare global {
+  interface Window {
+    L?: LeafletApi;
+  }
+}
+
+interface LeafletApi {
+  map: (elementId: string, options?: Record<string, unknown>) => LeafletMap;
+  tileLayer: (urlTemplate: string, options?: Record<string, unknown>) => LeafletLayer;
+  marker: (latLng: [number, number]) => LeafletMarker;
+  featureGroup: (layers: LeafletMarker[]) => LeafletFeatureGroup;
+}
+
+interface LeafletMap {
+  setView: (center: [number, number], zoom: number) => LeafletMap;
+  remove: () => void;
+  eachLayer: (callback: (layer: LeafletLayer) => void) => void;
+  removeLayer: (layer: LeafletLayer) => void;
+  fitBounds: (bounds: unknown, options?: Record<string, unknown>) => void;
+  on: (eventName: string, handler: (event: LeafletPopupEvent) => void) => void;
+}
+
+interface LeafletLayer {
+  addTo: (map: LeafletMap) => LeafletLayer;
+}
+
+interface LeafletMarker extends LeafletLayer {
+  bindPopup: (content: string) => LeafletMarker;
+}
+
+interface LeafletFeatureGroup {
+  getBounds: () => unknown;
+}
+
+interface LeafletPopupEvent {
+  popup?: {
+    getElement: () => HTMLElement | null;
+  };
+}
+
+interface FarmMapPoint {
+  farm: Farm;
+  lat: number;
+  lng: number;
+  approximate: boolean;
+}
 
 @Component({
   selector: 'app-farms-list',
@@ -17,8 +71,9 @@ import { AuthService } from '../../../services/auth.service';
   styleUrl: './farms-list.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class FarmsList implements OnInit, OnDestroy {
+export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
   farms: Farm[] = [];
+  mapFarms: Farm[] = [];
   query = '';
   sortBy = 'name-asc';
   page = 1;
@@ -28,13 +83,17 @@ export class FarmsList implements OnInit, OnDestroy {
   loading = true;
   error = false;
   errorMessage = '';
+  mapMessage = 'Loading your farm map...';
   deletingFarmId = '';
   showMyFarms = false;
+  private mapReady = false;
+  private leafletMap: LeafletMap | null = null;
   private destroy$ = new Subject<void>();
 
   constructor(
     private readonly farmService: FarmService,
     public readonly authService: AuthService,
+    private readonly router: Router,
     private readonly cdr: ChangeDetectorRef
   ) {}
 
@@ -49,11 +108,19 @@ export class FarmsList implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadFarms();
+    this.loadMapFarms();
+  }
+
+  ngAfterViewInit(): void {
+    this.mapReady = true;
+    this.renderFarmMap();
   }
 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    this.leafletMap?.remove();
+    this.leafletMap = null;
   }
 
   toggleMyFarms(): void {
@@ -148,6 +215,197 @@ export class FarmsList implements OnInit, OnDestroy {
 
     this.query = '';
     this.loadFarms(1);
+  }
+
+
+  loadMapFarms(): void {
+    this.farmService.getMyFarms(1, 100)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          this.mapFarms = response.data;
+          this.mapMessage = this.mapFarms.length
+            ? ''
+            : 'Create a farm to see it on your map.';
+          this.renderFarmMap();
+          this.cdr.markForCheck();
+        },
+        error: (err) => {
+          this.mapMessage = this.getErrorMessage(
+            err,
+            'Unable to load your farm map right now.'
+          );
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+
+  private renderFarmMap(): void {
+    if (!this.mapReady) {
+      return;
+    }
+
+    const leaflet = window.L;
+    if (!leaflet) {
+      this.mapMessage = 'Map assets are still loading. Refresh if the map does not appear.';
+      this.cdr.markForCheck();
+      return;
+    }
+
+    if (!this.leafletMap) {
+      this.leafletMap = leaflet.map('farm-map', {
+        scrollWheelZoom: false,
+      }).setView([54.6, -5.93], 6);
+
+      leaflet
+        .tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors',
+          maxZoom: 19,
+        })
+        .addTo(this.leafletMap);
+
+      this.leafletMap.on('popupopen', (event) => {
+        const button = event.popup?.getElement()?.querySelector<HTMLButtonElement>(
+          '[data-farm-id]'
+        );
+        button?.addEventListener('click', () => {
+          const farmId = button.dataset['farmId'];
+          if (farmId) {
+            void this.router.navigate(['/farms', farmId]);
+          }
+        });
+      });
+    }
+
+    this.leafletMap.eachLayer((layer) => {
+      const tileUrl = (layer as { _url?: string })._url;
+      if (!tileUrl) {
+        this.leafletMap?.removeLayer(layer);
+      }
+    });
+
+    const points = this.mapFarms.map((farm) => this.farmMapPoint(farm));
+    const markers = points.map((point) =>
+      leaflet
+        .marker([point.lat, point.lng])
+        .bindPopup(this.markerPopup(point))
+        .addTo(this.leafletMap as LeafletMap) as LeafletMarker
+    );
+
+    if (markers.length > 0) {
+      this.leafletMap.fitBounds(leaflet.featureGroup(markers).getBounds(), {
+        padding: [24, 24],
+        maxZoom: 11,
+      });
+      this.mapMessage = points.some((point) => point.approximate)
+        ? 'Some markers use approximate demo coordinates.'
+        : '';
+    }
+  }
+
+
+  private farmMapPoint(farm: Farm): FarmMapPoint {
+    const explicitLat = this.toNumber(farm.latitude);
+    const explicitLng = this.toNumber(farm.longitude);
+    if (explicitLat !== null && explicitLng !== null) {
+      return { farm, lat: explicitLat, lng: explicitLng, approximate: false };
+    }
+
+    const location = farm.location;
+    if (location && typeof location === 'object' && Array.isArray(location.coordinates)) {
+      const [lng, lat] = location.coordinates;
+      if (typeof lat === 'number' && typeof lng === 'number') {
+        return { farm, lat, lng, approximate: false };
+      }
+    }
+
+    if (typeof location === 'string') {
+      const match = location.match(/POINT\s*\(\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\)/i);
+      if (match) {
+        return {
+          farm,
+          lat: Number(match[2]),
+          lng: Number(match[1]),
+          approximate: false,
+        };
+      }
+    }
+
+    const areaName = String(farm.address?.area_name || '').toLowerCase();
+    const nearLondon = areaName.includes('london');
+    return {
+      farm,
+      lat: nearLondon ? 51.5072 : 54.5973,
+      lng: nearLondon ? -0.1276 : -5.9301,
+      approximate: true,
+    };
+  }
+
+
+  private markerPopup(point: FarmMapPoint): string {
+    const farm = point.farm;
+    const farmName = this.escapeHtml(farm.farm_name || 'Unnamed farm');
+    const cropType = this.escapeHtml(farm.crop_type || 'Not specified');
+    const moisture = this.escapeHtml(this.soilMoistureLabel(farm));
+    const farmId = this.escapeHtml(farm._id || '');
+    const locationLabel = point.approximate
+      ? '<p class="map-popup-note">Approximate demo location</p>'
+      : '';
+
+    return `
+      <div class="farm-map-popup">
+        <strong>${farmName}</strong>
+        <span>Crop: ${cropType}</span>
+        <span>Soil moisture: ${moisture}</span>
+        ${locationLabel}
+        <button type="button" class="map-popup-link" data-farm-id="${farmId}">
+          View farm details
+        </button>
+      </div>
+    `;
+  }
+
+
+  private soilMoistureLabel(farm: Farm): string {
+    const sensor = farm.sensors?.find((item) => {
+      const type = String(item.type || '').trim().toLowerCase().replace(' ', '_');
+      return type === 'soil_moisture';
+    });
+
+    const latestReading = sensor?.readings?.[sensor.readings.length - 1]?.value;
+    const value = sensor?.value ?? latestReading;
+    const unit = typeof sensor?.unit === 'string' ? sensor.unit : '%';
+
+    return value === undefined || value === null ? 'Not available' : `${value}${unit}`;
+  }
+
+
+  private toNumber(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    return null;
+  }
+
+
+  private escapeHtml(value: string): string {
+    return value.replace(/[&<>"']/g, (char) => {
+      const replacements: Record<string, string> = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+      };
+      return replacements[char];
+    });
   }
 
 
