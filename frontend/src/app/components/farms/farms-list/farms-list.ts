@@ -57,6 +57,16 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
   private leafletMap: L.Map | null = null;
   private markerLayers: L.Marker[] = [];
   private mapResizeTimer: number | undefined;
+  private readonly farmMarkerIcon = L.icon({
+    iconUrl: 'assets/leaflet/marker-icon.png',
+    iconRetinaUrl: 'assets/leaflet/marker-icon-2x.png',
+    shadowUrl: 'assets/leaflet/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41],
+    shadowAnchor: [12, 41],
+  });
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -227,6 +237,12 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
       this.leafletMap = L.map(this.farmMapElement.nativeElement, {
         scrollWheelZoom: false,
       }).setView([54.6, -5.93], 6);
+      this.leafletMap.createPane('farmMarkers');
+      const markerPane = this.leafletMap.getPane('farmMarkers');
+      if (markerPane) {
+        markerPane.style.zIndex = '650';
+        markerPane.style.pointerEvents = 'none';
+      }
 
       L
         .tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -252,12 +268,7 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
     this.markerLayers = [];
 
     const points = this.mapFarms.map((farm) => this.farmMapPoint(farm));
-    const markers = points.map((point) =>
-      L
-        .marker([point.lat, point.lng])
-        .bindPopup(this.markerPopup(point))
-        .addTo(this.leafletMap as L.Map)
-    );
+    const markers = points.map((point) => this.createFarmMarker(point));
     this.markerLayers = markers;
 
     if (markers.length > 0) {
@@ -275,11 +286,31 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
 
 
   private configureLeafletMarkerIcons(): void {
+    delete (L.Icon.Default.prototype as { _getIconUrl?: unknown })._getIconUrl;
     L.Icon.Default.mergeOptions({
       iconRetinaUrl: 'assets/leaflet/marker-icon-2x.png',
       iconUrl: 'assets/leaflet/marker-icon.png',
       shadowUrl: 'assets/leaflet/marker-shadow.png',
     });
+  }
+
+
+  private createFarmMarker(point: FarmMapPoint): L.Marker {
+    const marker = L.marker([point.lat, point.lng], {
+      icon: this.farmMarkerIcon,
+      pane: 'farmMarkers',
+      keyboard: true,
+      riseOnHover: true,
+      riseOffset: 300,
+    }).bindPopup(this.markerPopup(point), {
+      closeButton: true,
+      autoPan: true,
+      maxWidth: 260,
+    });
+
+    marker.on('click', () => marker.openPopup());
+    marker.addTo(this.leafletMap as L.Map);
+    return marker;
   }
 
 

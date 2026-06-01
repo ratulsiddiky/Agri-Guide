@@ -57,10 +57,22 @@
 }
 
 :host ::ng-deep .farm-map.leaflet-container,
-:host ::ng-deep .farm-map .leaflet-pane,
 :host ::ng-deep .farm-map .leaflet-tile-container {
   width: 100%;
   height: 100%;
+}
+
+:host ::ng-deep .farm-map .leaflet-popup-pane {
+  pointer-events: auto;
+}
+
+:host ::ng-deep .farm-map .leaflet-marker-icon,
+:host ::ng-deep .farm-map .leaflet-marker-shadow {
+  pointer-events: auto;
+}
+
+:host ::ng-deep .farm-map .leaflet-marker-icon {
+  cursor: pointer;
 }
 
 .map-message {
