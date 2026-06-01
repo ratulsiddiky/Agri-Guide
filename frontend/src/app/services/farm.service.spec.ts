@@ -25,6 +25,8 @@ describe('FarmService', () => {
       checkIrrigation: () => of({ status: 'OK' }),
       syncWeather: () => of(void 0),
       addSensor: () => of(void 0),
+      getFarmSensors: () => of({ farm_id: 'farm-1', count: 0, sensors: [] }),
+      generateDemoSensors: () => of({ message: 'ok', farm_id: 'farm-1', count: 5, sensors: [] }),
       broadcastAlert: () => of({ message: 'ok', farms_notified: 0 }),
       getRegionalInsights: () =>
         of({

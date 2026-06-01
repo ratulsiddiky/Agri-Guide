@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../../environments/environment';
-import { Farm } from '../models/farm.model';
+import { Farm, FarmSensor } from '../models/farm.model';
 
 export interface FarmPagination {
   page: number;
@@ -61,6 +61,25 @@ export interface LatestSensorsResponse {
   source: string;
   status: string;
   timestamp: string;
+}
+
+export interface DashboardSensorRow {
+  sensor: string;
+  farm: string;
+  type: string;
+  value: string;
+  status: string;
+}
+
+export interface DashboardSummaryResponse {
+  total_farms: number;
+  total_sensors: number;
+  average_soil_moisture: number | null;
+  latest_temperature: number | null;
+  latest_humidity: number | null;
+  active_alerts_count: number;
+  irrigation_recommendation: string;
+  sensor_rows: DashboardSensorRow[];
 }
 
 export interface CropDetectionResponse {
@@ -211,6 +230,19 @@ export class ApiService {
     return this.http.post<void>(`${this.baseUrl}/farms/${id}/sensors`, sensor);
   }
 
+  getFarmSensors(id: string) {
+    return this.http.get<{ farm_id: string; count: number; sensors: FarmSensor[] }>(
+      `${this.baseUrl}/farms/${id}/sensors`
+    );
+  }
+
+  generateDemoSensors(id: string) {
+    return this.http.post<{ message: string; farm_id: string; count: number; sensors: FarmSensor[] }>(
+      `${this.baseUrl}/farms/${id}/sensors/demo`,
+      {}
+    );
+  }
+
   broadcastAlert(payload: BroadcastAlertRequest) {
     return this.http.post<BroadcastAlertResponse>(
       `${this.baseUrl}/farms/alerts/broadcast`,
@@ -230,6 +262,10 @@ export class ApiService {
 
   getLatestSensors() {
     return this.http.get<LatestSensorsResponse>(`${this.baseUrl}/sensors/latest`);
+  }
+
+  getDashboardSummary() {
+    return this.http.get<DashboardSummaryResponse>(`${this.baseUrl}/dashboard/summary`);
   }
 
   detectCropDisease() {

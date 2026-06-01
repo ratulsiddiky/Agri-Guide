@@ -2,7 +2,7 @@
   <section class="welcome-hero">
     <div>
       <p class="eyebrow">Agri Guide</p>
-      <h1>Good morning, Farmer John! 🌱</h1>
+      <h1>Good morning, {{ greetingName }}!</h1>
       <p class="hero-subtitle">Here is an overview of your farms and current conditions.</p>
     </div>
 
@@ -73,6 +73,10 @@
               <td>{{ row.type }}</td>
               <td>{{ row.value }}</td>
               <td><span class="reading-status">{{ row.status }}</span></td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="5">No farm sensors yet. Create a farm to generate demo readings.</td>
             </tr>
           }
         </tbody>

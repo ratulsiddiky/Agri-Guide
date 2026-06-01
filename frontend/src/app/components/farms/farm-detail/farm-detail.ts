@@ -2,8 +2,8 @@ import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRe
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subject, forkJoin, timer } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { Subject, forkJoin, of, timer } from 'rxjs';
+import { catchError, takeUntil } from 'rxjs/operators';
 import { Farm, FarmSensor } from '../../../models/farm.model';
 import { ApiService } from '../../../services/api.service';
 import { FarmService } from '../../../services/farm.service';
@@ -43,6 +43,7 @@ export class FarmDetail implements OnInit, OnDestroy {
   showSensorForm = false;
   newSensor: FarmSensor = { sensor_id: '', type: '' };
   sensorMessage = '';
+  generatingDemoSensors = false;
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -81,14 +82,21 @@ export class FarmDetail implements OnInit, OnDestroy {
 
     forkJoin({
       farm: this.farmService.getFarmById(this.farmId),
-      insights: this.farmService.getFarmInsights(this.farmId),
-      irrigation: this.farmService.checkIrrigation(this.farmId),
+      sensors: this.farmService.getFarmSensors(this.farmId).pipe(
+        catchError(() => of([] as FarmSensor[]))
+      ),
+      insights: this.farmService.getFarmInsights(this.farmId).pipe(
+        catchError(() => of(null))
+      ),
+      irrigation: this.farmService.checkIrrigation(this.farmId).pipe(
+        catchError(() => of(null))
+      ),
     })
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (data) => {
-        this.farm = data.farm;
-        this.insights = data.insights.dashboard_data as FarmInsights;
+        this.farm = { ...data.farm, sensors: data.sensors };
+        this.insights = data.insights?.dashboard_data as FarmInsights | null;
         this.irrigation = data.irrigation as IrrigationStatus;
         this.loading = false;
         this.cdr.markForCheck();  
@@ -153,6 +161,39 @@ export class FarmDetail implements OnInit, OnDestroy {
           this.cdr.markForCheck(); 
         },
       });
+  }
+
+  generateDemoSensors(): void {
+    this.generatingDemoSensors = true;
+    this.sensorMessage = '';
+    this.cdr.markForCheck();
+
+    this.farmService.generateDemoSensors(this.farmId)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.sensorMessage = 'Demo sensors generated successfully.';
+          this.showToast('Demo sensors generated successfully.', 'success');
+          this.generatingDemoSensors = false;
+          this.cdr.markForCheck();
+          this.loadFarmData();
+        },
+        error: (err) => {
+          this.sensorMessage =
+            this.api.getErrorMessage(err) ||
+            `Unable to generate demo sensors for farm '${this.farmId}'. Please try again.`;
+          this.showToast(this.sensorMessage, 'danger');
+          this.generatingDemoSensors = false;
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  sensorReading(sensor: FarmSensor): string {
+    const value = sensor.value ?? sensor.readings?.[sensor.readings.length - 1]?.value;
+    const unit = typeof sensor.unit === 'string' ? sensor.unit : '';
+
+    return value === undefined || value === null ? 'No reading' : `${value}${unit}`;
   }
 
   showToast(message: string, type: 'success' | 'danger'): void {

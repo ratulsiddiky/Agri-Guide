@@ -7,13 +7,13 @@ import { AuthService } from '../../../services/auth.service';
 import {
   ApiService,
   CropDetectionResponse,
+  DashboardSummaryResponse,
   FailoverTestResponse,
   IrrigationDecisionResponse,
   LatestSensorsResponse,
   SystemMetricsResponse,
   WeatherAlertResponse,
 } from '../../../services/api.service';
-import { FarmService } from '../../../services/farm.service';
 
 @Component({
   selector: 'app-home',
@@ -25,12 +25,12 @@ import { FarmService } from '../../../services/farm.service';
 })
 export class Home implements OnInit, OnDestroy {
   authService = inject(AuthService);
-  farmService = inject(FarmService);
   apiService = inject(ApiService);
   private cdr = inject(ChangeDetectorRef);
 
   totalFarms = 0;
   isLoadingStats = true;
+  private hasUserSummary = false;
   private destroy$ = new Subject<void>();
 
   kpiCards = [
@@ -122,22 +122,6 @@ export class Home implements OnInit, OnDestroy {
   ngOnInit() {
     this.isLoadingStats = true;
     this.cdr.markForCheck();
-    
-    this.farmService.getFarms(1, 1)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (res) => {
-          this.totalFarms = res.pagination?.total || 0;
-          this.isLoadingStats = false;
-          this.cdr.markForCheck();
-        },
-        error: (err) => {
-          console.error('Stats load failed', err);
-          this.totalFarms = 0;
-          this.isLoadingStats = false;
-          this.cdr.markForCheck();
-        }
-      });
 
     this.loadSmartAgricultureData();
   }
@@ -149,6 +133,12 @@ export class Home implements OnInit, OnDestroy {
 
   private loadSmartAgricultureData(): void {
     forkJoin({
+      summary: this.apiService.getDashboardSummary().pipe(
+        catchError((err) => {
+          console.error('Dashboard summary load failed', err);
+          return of(null as DashboardSummaryResponse | null);
+        })
+      ),
       system: this.apiService.getSystemMetrics().pipe(
         catchError((err) => {
           console.error('System metrics load failed', err);
@@ -188,6 +178,7 @@ export class Home implements OnInit, OnDestroy {
     })
       .pipe(takeUntil(this.destroy$))
       .subscribe((responses) => {
+        this.applyDashboardSummary(responses.summary);
         this.applySystemMetrics(responses.system);
         this.applyLatestSensors(responses.sensors);
         this.applyCropDetection(responses.detection);
@@ -222,8 +213,66 @@ export class Home implements OnInit, OnDestroy {
     ]);
   }
 
+  private applyDashboardSummary(summary: DashboardSummaryResponse | null): void {
+    this.isLoadingStats = false;
+    if (!summary) {
+      this.totalFarms = 0;
+      return;
+    }
+
+    this.hasUserSummary = true;
+    this.totalFarms = summary.total_farms;
+    this.updateKpiCard('Total Farms', `${summary.total_farms}`, 'Your farms');
+    this.updateKpiCard('Total Sensors', `${summary.total_sensors}`, 'Across your farms');
+    this.updateKpiCard('Active Alerts', `${summary.active_alerts_count}`, 'From your farms');
+
+    const soilValue = summary.average_soil_moisture;
+    this.updateKpiCard(
+      'Avg Soil Moisture',
+      soilValue === null ? 'N/A' : `${soilValue}%`,
+      soilValue === null ? 'Add soil sensors' : 'Your farm average'
+    );
+
+    this.updateKpiCard(
+      "Today's Forecast",
+      summary.latest_temperature === null ? 'N/A' : `${summary.latest_temperature}°C`,
+      'Latest farm temperature'
+    );
+
+    this.updateFeatureCard('Latest Sensor Readings', [
+      {
+        label: 'Temperature',
+        value: summary.latest_temperature === null ? 'No reading' : `${summary.latest_temperature}°C`,
+      },
+      {
+        label: 'Humidity',
+        value: summary.latest_humidity === null ? 'No reading' : `${summary.latest_humidity}%`,
+      },
+      {
+        label: 'Soil Moisture',
+        value: soilValue === null ? 'No reading' : `${soilValue}%`,
+      },
+      { label: 'Source', value: 'Your farms' },
+    ]);
+
+    this.updateFeatureCard('Irrigation Decision', [
+      { label: 'Decision', value: summary.irrigation_recommendation },
+      { label: 'Basis', value: 'Average soil moisture' },
+    ]);
+
+    if (summary.sensor_rows.length > 0) {
+      this.sensorRows = summary.sensor_rows;
+    } else {
+      this.sensorRows = [];
+    }
+  }
+
   private applyLatestSensors(sensors: LatestSensorsResponse | null): void {
     if (!sensors) {
+      return;
+    }
+
+    if (this.hasUserSummary) {
       return;
     }
 
@@ -274,6 +323,10 @@ export class Home implements OnInit, OnDestroy {
       return;
     }
 
+    if (this.hasUserSummary) {
+      return;
+    }
+
     this.updateFeatureCard('Irrigation Decision', [
       { label: 'Decision', value: irrigation.decision },
       { label: 'Reason', value: irrigation.rule_used },
@@ -305,7 +358,9 @@ export class Home implements OnInit, OnDestroy {
       { label: 'Action', value: weather.recommended_action },
     ]);
 
-    this.updateKpiCard('Active Alerts', weather.alert_level === 'Medium' ? '2' : '1', weather.message);
+    if (!this.hasUserSummary) {
+      this.updateKpiCard('Active Alerts', weather.alert_level === 'Medium' ? '2' : '1', weather.message);
+    }
   }
 
   private applyFailoverTest(failover: FailoverTestResponse | null): void {

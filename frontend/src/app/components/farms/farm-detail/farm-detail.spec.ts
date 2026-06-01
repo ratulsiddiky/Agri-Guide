@@ -19,6 +19,8 @@ describe('FarmDetail', () => {
       getFarmInsights: () =>
         of({ dashboard_data: { average_temp: 18, average_wind: 6 } } as never),
       checkIrrigation: () => of({ status: 'OK', moisture: 44 } as never),
+      getFarmSensors: () => of([] as never),
+      generateDemoSensors: () => of({ count: 5, sensors: [] } as never),
       syncWeather: (id: string) => {
         syncWeatherCalledWith = id;
         return of(void 0);

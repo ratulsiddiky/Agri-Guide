@@ -18,7 +18,13 @@ export interface SensorReading {
 export interface FarmSensor {
   sensor_id: string;
   type: string;
-  status?: boolean;
+  farm_id?: string;
+  user_id?: string;
+  value?: string | number;
+  unit?: string;
+  status?: boolean | string;
+  timestamp?: string;
+  source?: string;
   readings?: SensorReading[];
   [key: string]: unknown;
 }

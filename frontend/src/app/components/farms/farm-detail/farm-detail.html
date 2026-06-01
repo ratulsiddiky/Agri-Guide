@@ -161,10 +161,20 @@
         <div class="card shadow-sm">
           <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
             <span>📡 Sensors ({{ farm.sensors?.length || 0 }})</span>
-            <button class="btn btn-light btn-sm"
-              (click)="showSensorForm = !showSensorForm">
-              {{ showSensorForm ? 'Cancel' : '+ Add Sensor' }}
-            </button>
+            <div class="d-flex gap-2">
+              <button class="btn btn-outline-light btn-sm"
+                (click)="generateDemoSensors()"
+                [disabled]="generatingDemoSensors">
+                @if (generatingDemoSensors) {
+                  <span class="spinner-border spinner-border-sm me-1"></span>
+                }
+                Generate demo sensors
+              </button>
+              <button class="btn btn-light btn-sm"
+                (click)="showSensorForm = !showSensorForm">
+                {{ showSensorForm ? 'Cancel' : '+ Add Sensor' }}
+              </button>
+            </div>
           </div>
 
           <div class="card-body">
@@ -208,13 +218,14 @@
                           [class.bg-secondary]="!sensor.status">
                           {{ sensor.status ? 'Active' : 'Inactive' }}
                         </span>
-                        @if (sensor.readings && sensor.readings.length > 0) {
-                          <p class="mb-0 mt-1 small">
-                            Last reading:
-                            <strong [appHighlightStatus]="sensor.readings[sensor.readings.length - 1].value">
-                              {{ sensor.readings[sensor.readings.length - 1].value }}
-                            </strong>
-                          </p>
+                        <p class="mb-0 mt-1 small">
+                          Last reading:
+                          <strong [appHighlightStatus]="sensorReading(sensor)">
+                            {{ sensorReading(sensor) }}
+                          </strong>
+                        </p>
+                        @if (sensor.source) {
+                          <small class="text-muted d-block">{{ sensor.source }}</small>
                         }
                       </div>
                     </div>
@@ -223,7 +234,15 @@
               </div>
             } @else {
               @if (!showSensorForm) {
-                <p class="text-muted mb-0">No sensors registered. Click "Add Sensor" above.</p>
+                <p class="text-muted mb-2">No sensors found for this farm yet.</p>
+                <button class="btn btn-success btn-sm"
+                  (click)="generateDemoSensors()"
+                  [disabled]="generatingDemoSensors">
+                  @if (generatingDemoSensors) {
+                    <span class="spinner-border spinner-border-sm me-1"></span>
+                  }
+                  Generate demo sensors
+                </button>
               }
             }
 

@@ -213,6 +213,29 @@ export class FarmService {
     );
   }
 
+  getFarmSensors(id: string) {
+    return this.api.getFarmSensors(id).pipe(
+      map((response) => response.sensors || []),
+      catchError((error) =>
+        this.rethrowAsHttpError(
+          error,
+          `Unable to load sensors for farm '${id}'. Please confirm you have access and try again.`
+        )
+      )
+    );
+  }
+
+  generateDemoSensors(id: string) {
+    return this.api.generateDemoSensors(id).pipe(
+      catchError((error) =>
+        this.rethrowAsHttpError(
+          error,
+          `Unable to generate demo sensors for farm '${id}'. Please try again.`
+        )
+      )
+    );
+  }
+
   /**
    * Sends an admin broadcast alert for farms inside the provided danger zone.
    */

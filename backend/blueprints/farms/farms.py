@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import random
 import requests
 from bson import ObjectId
 from flask import Blueprint, jsonify, make_response, request
@@ -25,6 +26,93 @@ def _error_response(message, status_code, **extra):
 
 def _farms_collection():
     return config.get_db().farms
+
+
+def _sensor_value(sensor_type):
+    ranges = {
+        "soil_moisture": (45, 70, "%"),
+        "temperature": (18, 26, "°C"),
+        "humidity": (55, 75, "%"),
+        "light": (20000, 50000, "lux"),
+        "ph": (5.8, 7.2, "pH"),
+    }
+    low, high, unit = ranges[sensor_type]
+    value = random.randint(low, high) if sensor_type == "light" else round(random.uniform(low, high), 1)
+    return value, unit
+
+
+def _generate_default_sensors(farm_id, user_id, timestamp=None):
+    timestamp = timestamp or datetime.now(timezone.utc)
+    farm_id_text = str(farm_id)
+    user_id_text = str(user_id)
+    sensors = []
+
+    for sensor_type in ["soil_moisture", "temperature", "humidity", "light", "ph"]:
+        value, unit = _sensor_value(sensor_type)
+        sensors.append(
+            {
+                "sensor_id": f"{sensor_type.upper()}-{farm_id_text[-6:]}",
+                "farm_id": farm_id_text,
+                "user_id": user_id_text,
+                "type": sensor_type,
+                "value": value,
+                "unit": unit,
+                "status": "active",
+                "timestamp": timestamp,
+                "source": "auto_generated_demo_sensor",
+                "readings": [
+                    {
+                        "value": value,
+                        "unit": unit,
+                        "timestamp": timestamp,
+                        "source": "auto_generated_demo_sensor",
+                    }
+                ],
+            }
+        )
+
+    return sensors
+
+
+def _sensor_type(sensor):
+    return str(sensor.get("type", "")).strip().lower().replace(" ", "_")
+
+
+def _sensor_numeric_value(sensor):
+    value = sensor.get("value")
+    readings = sensor.get("readings", [])
+    if value is None and isinstance(readings, list) and readings:
+        latest = readings[-1]
+        if isinstance(latest, dict):
+            value = latest.get("value")
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _sensor_timestamp(sensor):
+    timestamp = sensor.get("timestamp")
+    readings = sensor.get("readings", [])
+    if timestamp is None and isinstance(readings, list) and readings:
+        latest = readings[-1]
+        if isinstance(latest, dict):
+            timestamp = latest.get("timestamp")
+    if isinstance(timestamp, datetime):
+        return timestamp.isoformat()
+    return str(timestamp or "")
+
+
+def _format_sensor_value(sensor):
+    value = sensor.get("value")
+    readings = sensor.get("readings", [])
+    if value is None and isinstance(readings, list) and readings:
+        latest = readings[-1]
+        if isinstance(latest, dict):
+            value = latest.get("value")
+    unit = sensor.get("unit", "")
+    return f"{value}{unit}" if value is not None else "No reading"
 
 
 def get_farm_if_authorised(farm_id, current_user):
@@ -153,8 +241,12 @@ def create_farm(current_user):
             errors=validation_errors,
         )
 
+    farm_id = ObjectId()
+    farm_data["_id"] = farm_id
     farm_data["owner_id"] = current_user["_id"]
     farm_data["created_at"] = datetime.now(timezone.utc)
+    if not farm_data.get("sensors"):
+        farm_data["sensors"] = _generate_default_sensors(farm_id, current_user["_id"])
     result = _farms_collection().insert_one(farm_data)
 
     return make_response(
@@ -238,6 +330,51 @@ def add_sensor(current_user, farm_id):
 
     _farms_collection().update_one({"_id": ObjectId(farm_id)}, {"$push": {"sensors": sensor}})
     return make_response(jsonify({"message": "Sensor added to farm!", "sensor": sensor}), 201)
+
+
+@farms_bp.route("/api/farms/<farm_id>/sensors", methods=["GET"])
+@jwt_required
+def get_farm_sensors(current_user, farm_id):
+    farm, error_response = get_farm_if_authorised(farm_id, current_user)
+    if error_response:
+        return error_response
+
+    sensors = farm.get("sensors", [])
+    return make_response(
+        jsonify(
+            {
+                "farm_id": str(farm["_id"]),
+                "count": len(sensors),
+                "sensors": serialize_document(sensors),
+            }
+        ),
+        200,
+    )
+
+
+@farms_bp.route("/api/farms/<farm_id>/sensors/demo", methods=["POST"])
+@jwt_required
+def generate_demo_sensors(current_user, farm_id):
+    farm, error_response = get_farm_if_authorised(farm_id, current_user)
+    if error_response:
+        return error_response
+
+    sensors = _generate_default_sensors(farm["_id"], current_user["_id"])
+    _farms_collection().update_one(
+        {"_id": ObjectId(farm_id)},
+        {"$set": {"sensors": sensors}},
+    )
+    return make_response(
+        jsonify(
+            {
+                "message": "Demo sensors generated.",
+                "farm_id": farm_id,
+                "count": len(sensors),
+                "sensors": serialize_document(sensors),
+            }
+        ),
+        201,
+    )
 
 
 @farms_bp.route("/api/farms/my", methods=["GET"])
@@ -481,12 +618,8 @@ def check_irrigation(current_user, farm_id):
 
     moisture_level = None
     for sensor in farm.get("sensors", []):
-        if sensor.get("type") == "Soil Moisture":
-            readings = sensor.get("readings", [])
-            if readings and isinstance(readings, list):
-                last = readings[-1]
-                if isinstance(last, dict):
-                    moisture_level = last.get("value")
+        if _sensor_type(sensor) == "soil_moisture":
+            moisture_level = _sensor_numeric_value(sensor)
             break
 
     if moisture_level is None:
@@ -505,6 +638,83 @@ def check_irrigation(current_user, farm_id):
 
     status = "WARNING" if moisture_val < 20.0 else "OK"
     return make_response(jsonify({"status": status, "moisture": moisture_val}), 200)
+
+
+@farms_bp.route("/api/dashboard/summary", methods=["GET"])
+@jwt_required
+def get_dashboard_summary(current_user):
+    query = {"owner_id": current_user["_id"]}
+    try:
+        farms = list(_farms_collection().find(query))
+    except PyMongoError as exc:
+        return _error_response(
+            "Unable to load dashboard summary because the database query failed.",
+            500,
+            error=str(exc),
+        )
+
+    sensors = []
+    soil_values = []
+    temperature_sensors = []
+    humidity_sensors = []
+    active_alerts_count = 0
+    sensor_rows = []
+
+    for farm in farms:
+        farm_name = farm.get("farm_name", "Farm")
+        farm_sensors = farm.get("sensors", [])
+        sensors.extend(farm_sensors)
+        active_alerts_count += len(farm.get("alerts_history", []))
+
+        for sensor in farm_sensors:
+            sensor_type = _sensor_type(sensor)
+            value = _sensor_numeric_value(sensor)
+            if sensor_type == "soil_moisture" and value is not None:
+                soil_values.append(value)
+            if sensor_type == "temperature":
+                temperature_sensors.append(sensor)
+            if sensor_type == "humidity":
+                humidity_sensors.append(sensor)
+            sensor_rows.append(
+                {
+                    "sensor": sensor.get("sensor_id", "Unknown"),
+                    "farm": farm_name,
+                    "type": sensor.get("type", "Unknown"),
+                    "value": _format_sensor_value(sensor),
+                    "status": str(sensor.get("status", "unknown")),
+                }
+            )
+
+    average_soil_moisture = round(sum(soil_values) / len(soil_values), 1) if soil_values else None
+    latest_temperature_sensor = max(temperature_sensors, key=_sensor_timestamp, default=None)
+    latest_humidity_sensor = max(humidity_sensors, key=_sensor_timestamp, default=None)
+    latest_temperature = _sensor_numeric_value(latest_temperature_sensor) if latest_temperature_sensor else None
+    latest_humidity = _sensor_numeric_value(latest_humidity_sensor) if latest_humidity_sensor else None
+
+    if average_soil_moisture is None:
+        irrigation_recommendation = "Add soil moisture sensors to calculate irrigation guidance."
+    elif average_soil_moisture < 45:
+        irrigation_recommendation = "Irrigation recommended: average soil moisture is below the target range."
+    elif average_soil_moisture > 70:
+        irrigation_recommendation = "No irrigation recommended: soil moisture is above the target range."
+    else:
+        irrigation_recommendation = "No irrigation required: soil moisture is in the optimal range."
+
+    return make_response(
+        jsonify(
+            {
+                "total_farms": len(farms),
+                "total_sensors": len(sensors),
+                "average_soil_moisture": average_soil_moisture,
+                "latest_temperature": latest_temperature,
+                "latest_humidity": latest_humidity,
+                "active_alerts_count": active_alerts_count,
+                "irrigation_recommendation": irrigation_recommendation,
+                "sensor_rows": sensor_rows[:8],
+            }
+        ),
+        200,
+    )
 
 
 @farms_bp.route("/api/farms/region/<region_name>/insights", methods=["GET"])

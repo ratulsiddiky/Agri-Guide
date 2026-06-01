@@ -3,6 +3,7 @@ from base64 import b64encode
 import bcrypt
 import mongomock
 import pytest
+from bson import ObjectId
 
 import config
 from app import create_app
@@ -59,6 +60,37 @@ def test_create_farm_succeeds_for_authenticated_user(client):
 
     assert response.status_code == 201
     assert response.get_json()["message"] == "Farm registered successfully!"
+
+
+def test_create_farm_creates_default_sensors(client):
+    token = _login_token(client)
+
+    response = client.post(
+        "/api/farms",
+        json={"farm_name": "Sensor Farm", "crop_type": "Tomatoes"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 201
+    farm_id = response.get_json()["farm_id"]
+    farm = config.get_db().farms.find_one({"_id": ObjectId(farm_id)})
+
+    sensors = farm["sensors"]
+    assert {sensor["type"] for sensor in sensors} == {
+        "soil_moisture",
+        "temperature",
+        "humidity",
+        "light",
+        "ph",
+    }
+    assert all(sensor["farm_id"] == farm_id for sensor in sensors)
+    assert all(sensor["source"] == "auto_generated_demo_sensor" for sensor in sensors)
+    values_by_type = {sensor["type"]: sensor["value"] for sensor in sensors}
+    assert 45 <= values_by_type["soil_moisture"] <= 70
+    assert 18 <= values_by_type["temperature"] <= 26
+    assert 55 <= values_by_type["humidity"] <= 75
+    assert 20000 <= values_by_type["light"] <= 50000
+    assert 5.8 <= values_by_type["ph"] <= 7.2
 
 
 def test_admin_can_delete_farm(client):

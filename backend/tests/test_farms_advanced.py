@@ -209,3 +209,136 @@ def test_irrigation_check(client):
     payload = response.get_json()
     assert payload["status"] == "WARNING"
     assert payload["moisture"] == 12.5
+
+
+def test_dashboard_summary_only_includes_current_user_farms_and_sensors(client):
+    farmer_token = _login_token(client, username="farmer_one")
+    _login_token(client, username="farmer_two")
+    farmer = config.get_db().users.find_one({"username": "farmer_one"})
+    other = config.get_db().users.find_one({"username": "farmer_two"})
+
+    config.get_db().farms.insert_many(
+        [
+            {
+                "farm_name": "Owned Farm",
+                "owner_id": farmer["_id"],
+                "alerts_history": [{"alert_type": "Heat"}],
+                "sensors": [
+                    {
+                        "sensor_id": "soil-owned",
+                        "type": "soil_moisture",
+                        "value": 50,
+                        "unit": "%",
+                        "status": "active",
+                    },
+                    {
+                        "sensor_id": "temp-owned",
+                        "type": "temperature",
+                        "value": 22,
+                        "unit": "°C",
+                        "status": "active",
+                    },
+                    {
+                        "sensor_id": "hum-owned",
+                        "type": "humidity",
+                        "value": 62,
+                        "unit": "%",
+                        "status": "active",
+                    },
+                ],
+            },
+            {
+                "farm_name": "Other Farm",
+                "owner_id": other["_id"],
+                "alerts_history": [{"alert_type": "Flood"}],
+                "sensors": [
+                    {
+                        "sensor_id": "soil-other",
+                        "type": "soil_moisture",
+                        "value": 10,
+                        "unit": "%",
+                        "status": "active",
+                    }
+                ],
+            },
+        ]
+    )
+
+    response = client.get(
+        "/api/dashboard/summary",
+        headers={"Authorization": f"Bearer {farmer_token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["total_farms"] == 1
+    assert payload["total_sensors"] == 3
+    assert payload["average_soil_moisture"] == 50
+    assert payload["latest_temperature"] == 22
+    assert payload["latest_humidity"] == 62
+    assert payload["active_alerts_count"] == 1
+    assert [row["sensor"] for row in payload["sensor_rows"]] == [
+        "soil-owned",
+        "temp-owned",
+        "hum-owned",
+    ]
+
+
+def test_farm_sensors_endpoint_works_for_owner(client):
+    token = _login_token(client)
+    owner = config.get_db().users.find_one({"username": "farmer_one"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {
+                "farm_name": "Sensor Farm",
+                "owner_id": owner["_id"],
+                "sensors": [
+                    {
+                        "sensor_id": "soil-001",
+                        "farm_id": "farm-ref",
+                        "type": "soil_moisture",
+                        "value": 55,
+                        "unit": "%",
+                        "status": "active",
+                    }
+                ],
+                "weather_logs": [],
+                "alerts_history": [],
+            }
+        ).inserted_id
+    )
+
+    response = client.get(
+        f"/api/farms/{farm_id}/sensors",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["farm_id"] == farm_id
+    assert payload["count"] == 1
+    assert payload["sensors"][0]["sensor_id"] == "soil-001"
+
+
+def test_farm_sensors_endpoint_blocks_other_users(client):
+    _login_token(client, username="owner_user")
+    intruder_token = _login_token(client, username="intruder_user")
+    owner = config.get_db().users.find_one({"username": "owner_user"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {
+                "farm_name": "Private Sensor Farm",
+                "owner_id": owner["_id"],
+                "sensors": [],
+                "weather_logs": [],
+                "alerts_history": [],
+            }
+        ).inserted_id
+    )
+
+    response = client.get(
+        f"/api/farms/{farm_id}/sensors",
+        headers={"Authorization": f"Bearer {intruder_token}"},
+    )
+
+    assert response.status_code == 403
