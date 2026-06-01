@@ -250,6 +250,56 @@
         </div>
       </div>
 
+      <!-- Sensor Trends -->
+      <div class="col-12">
+        <div class="card shadow-sm sensor-trends-card">
+          <div class="card-header bg-success text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span>📈 Sensor Trends</span>
+            @if (sensorHistory) {
+              <span class="badge bg-light text-success">
+                {{ sensorHistory.data_source === 'stored_sensor_readings' ? 'Stored readings' : 'Simulated trend' }}
+              </span>
+            }
+          </div>
+          <div class="card-body">
+            @if (chartMessage) {
+              <p class="text-muted small mb-3">{{ chartMessage }}</p>
+            }
+
+            @if (sensorHistory) {
+              <div class="row g-3">
+                <div class="col-lg-4">
+                  <div class="trend-chart-panel">
+                    <h6>Soil moisture</h6>
+                    <div class="trend-chart">
+                      <canvas #soilMoistureChart aria-label="Soil moisture trend"></canvas>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-lg-4">
+                  <div class="trend-chart-panel">
+                    <h6>Temperature</h6>
+                    <div class="trend-chart">
+                      <canvas #temperatureChart aria-label="Temperature trend"></canvas>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-lg-4">
+                  <div class="trend-chart-panel">
+                    <h6>Humidity</h6>
+                    <div class="trend-chart">
+                      <canvas #humidityChart aria-label="Humidity trend"></canvas>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            } @else {
+              <p class="text-muted mb-0">Sensor trend data is not available yet.</p>
+            }
+          </div>
+        </div>
+      </div>
+
     </div>
   }
 

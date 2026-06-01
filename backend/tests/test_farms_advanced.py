@@ -342,3 +342,86 @@ def test_farm_sensors_endpoint_blocks_other_users(client):
     )
 
     assert response.status_code == 403
+
+
+def test_sensor_history_endpoint_works_for_owner(client):
+    token = _login_token(client)
+    owner = config.get_db().users.find_one({"username": "farmer_one"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {
+                "farm_name": "Trend Farm",
+                "owner_id": owner["_id"],
+                "sensors": [
+                    {
+                        "sensor_id": "soil-001",
+                        "type": "soil_moisture",
+                        "readings": [
+                            {"value": 50, "timestamp": "2026-06-01T08:00:00+00:00"},
+                            {"value": 54, "timestamp": "2026-06-01T09:00:00+00:00"},
+                        ],
+                    },
+                    {
+                        "sensor_id": "temp-001",
+                        "type": "temperature",
+                        "readings": [
+                            {"value": 20, "timestamp": "2026-06-01T08:00:00+00:00"},
+                            {"value": 22, "timestamp": "2026-06-01T09:00:00+00:00"},
+                        ],
+                    },
+                    {
+                        "sensor_id": "hum-001",
+                        "type": "humidity",
+                        "readings": [
+                            {"value": 61, "timestamp": "2026-06-01T08:00:00+00:00"},
+                            {"value": 64, "timestamp": "2026-06-01T09:00:00+00:00"},
+                        ],
+                    },
+                ],
+                "weather_logs": [],
+                "alerts_history": [],
+            }
+        ).inserted_id
+    )
+
+    response = client.get(
+        f"/api/farms/{farm_id}/sensor-history",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["farm_id"] == farm_id
+    assert payload["farm_name"] == "Trend Farm"
+    assert payload["data_source"] == "stored_sensor_readings"
+    assert payload["timestamps"] == [
+        "2026-06-01T08:00:00+00:00",
+        "2026-06-01T09:00:00+00:00",
+    ]
+    assert payload["series"]["soil_moisture"] == [50.0, 54.0]
+    assert payload["series"]["temperature"] == [20.0, 22.0]
+    assert payload["series"]["humidity"] == [61.0, 64.0]
+
+
+def test_sensor_history_endpoint_blocks_other_users(client):
+    _login_token(client, username="owner_user")
+    intruder_token = _login_token(client, username="intruder_user")
+    owner = config.get_db().users.find_one({"username": "owner_user"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {
+                "farm_name": "Private Trend Farm",
+                "owner_id": owner["_id"],
+                "sensors": [],
+                "weather_logs": [],
+                "alerts_history": [],
+            }
+        ).inserted_id
+    )
+
+    response = client.get(
+        f"/api/farms/{farm_id}/sensor-history",
+        headers={"Authorization": f"Bearer {intruder_token}"},
+    )
+
+    assert response.status_code == 403

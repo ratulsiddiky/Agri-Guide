@@ -26,6 +26,14 @@ describe('FarmService', () => {
       syncWeather: () => of(void 0),
       addSensor: () => of(void 0),
       getFarmSensors: () => of({ farm_id: 'farm-1', count: 0, sensors: [] }),
+      getSensorHistory: () =>
+        of({
+          farm_id: 'farm-1',
+          farm_name: 'Farm',
+          timestamps: [],
+          series: { soil_moisture: [], temperature: [], humidity: [] },
+          data_source: 'simulated_from_latest',
+        }),
       generateDemoSensors: () => of({ message: 'ok', farm_id: 'farm-1', count: 5, sensors: [] }),
       broadcastAlert: () => of({ message: 'ok', farms_notified: 0 }),
       getRegionalInsights: () =>

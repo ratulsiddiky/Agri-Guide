@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import random
 import requests
 from bson import ObjectId
@@ -113,6 +113,113 @@ def _format_sensor_value(sensor):
             value = latest.get("value")
     unit = sensor.get("unit", "")
     return f"{value}{unit}" if value is not None else "No reading"
+
+
+def _iso_timestamp(value):
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value or "")
+
+
+def _sensor_reading_points(sensor):
+    readings = sensor.get("readings", [])
+    points = []
+    if isinstance(readings, list):
+        for reading in readings:
+            if not isinstance(reading, dict):
+                continue
+            try:
+                value = float(reading.get("value"))
+            except (TypeError, ValueError):
+                continue
+            points.append(
+                {
+                    "timestamp": _iso_timestamp(reading.get("timestamp") or sensor.get("timestamp")),
+                    "value": value,
+                }
+            )
+
+    if points:
+        return points
+
+    value = _sensor_numeric_value(sensor)
+    if value is None:
+        return []
+    return [{"timestamp": _iso_timestamp(sensor.get("timestamp")), "value": value}]
+
+
+def _simulated_trend_points(latest_value, sensor_type):
+    fallback_values = {
+        "soil_moisture": 58.0,
+        "temperature": 22.0,
+        "humidity": 64.0,
+    }
+    base = latest_value if latest_value is not None else fallback_values[sensor_type]
+    now = datetime.now(timezone.utc)
+    offsets = [-5, -3, -1, 2, 0, 1]
+    points = []
+    for index, offset in enumerate(offsets):
+        points.append(
+            {
+                "timestamp": (now - timedelta(hours=5 - index)).isoformat(),
+                "value": round(base + offset, 1),
+            }
+        )
+    return points
+
+
+def _sensor_history_payload(farm):
+    required_types = ["soil_moisture", "temperature", "humidity"]
+    sensors_by_type = {
+        _sensor_type(sensor): sensor
+        for sensor in farm.get("sensors", [])
+        if _sensor_type(sensor) in required_types
+    }
+    stored_points = {
+        sensor_type: _sensor_reading_points(sensors_by_type.get(sensor_type, {}))
+        for sensor_type in required_types
+    }
+    has_history = any(len(points) > 1 for points in stored_points.values())
+    data_source = "stored_sensor_readings" if has_history else "simulated_from_latest"
+
+    if data_source == "stored_sensor_readings":
+        series_points = stored_points
+    else:
+        series_points = {
+            sensor_type: _simulated_trend_points(
+                _sensor_numeric_value(sensors_by_type.get(sensor_type, {})),
+                sensor_type,
+            )
+            for sensor_type in required_types
+        }
+
+    max_length = max((len(points) for points in series_points.values()), default=0)
+    timestamps = []
+    for index in range(max_length):
+        timestamp = next(
+            (
+                points[index]["timestamp"]
+                for points in series_points.values()
+                if index < len(points) and points[index].get("timestamp")
+            ),
+            "",
+        )
+        timestamps.append(timestamp)
+
+    series = {}
+    for sensor_type, points in series_points.items():
+        values = [point["value"] for point in points]
+        while len(values) < max_length:
+            values.append(values[-1] if values else None)
+        series[sensor_type] = values
+
+    return {
+        "farm_id": str(farm["_id"]),
+        "farm_name": farm.get("farm_name", "Farm"),
+        "timestamps": timestamps,
+        "series": series,
+        "data_source": data_source,
+    }
 
 
 def get_farm_if_authorised(farm_id, current_user):
@@ -638,6 +745,16 @@ def check_irrigation(current_user, farm_id):
 
     status = "WARNING" if moisture_val < 20.0 else "OK"
     return make_response(jsonify({"status": status, "moisture": moisture_val}), 200)
+
+
+@farms_bp.route("/api/farms/<farm_id>/sensor-history", methods=["GET"])
+@jwt_required
+def get_sensor_history(current_user, farm_id):
+    farm, error_response = get_farm_if_authorised(farm_id, current_user)
+    if error_response:
+        return error_response
+
+    return make_response(jsonify(serialize_document(_sensor_history_payload(farm))), 200)
 
 
 @farms_bp.route("/api/dashboard/summary", methods=["GET"])

@@ -82,6 +82,18 @@ export interface DashboardSummaryResponse {
   sensor_rows: DashboardSensorRow[];
 }
 
+export interface SensorHistoryResponse {
+  farm_id: string;
+  farm_name: string;
+  timestamps: string[];
+  series: {
+    soil_moisture: Array<number | null>;
+    temperature: Array<number | null>;
+    humidity: Array<number | null>;
+  };
+  data_source: 'stored_sensor_readings' | 'simulated_from_latest';
+}
+
 export interface CropDetectionResponse {
   mode: string;
   model_type: string;
@@ -241,6 +253,10 @@ export class ApiService {
       `${this.baseUrl}/farms/${id}/sensors/demo`,
       {}
     );
+  }
+
+  getSensorHistory(id: string) {
+    return this.http.get<SensorHistoryResponse>(`${this.baseUrl}/farms/${id}/sensor-history`);
   }
 
   broadcastAlert(payload: BroadcastAlertRequest) {

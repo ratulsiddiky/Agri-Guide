@@ -1,11 +1,32 @@
-import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  ElementRef,
+  ViewChild,
+} from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject, forkJoin, of, timer } from 'rxjs';
 import { catchError, takeUntil } from 'rxjs/operators';
+import {
+  Chart,
+  ChartConfiguration,
+  LineController,
+  LineElement,
+  PointElement,
+  LinearScale,
+  CategoryScale,
+  Tooltip,
+  Legend,
+  Filler,
+} from 'chart.js';
 import { Farm, FarmSensor } from '../../../models/farm.model';
-import { ApiService } from '../../../services/api.service';
+import { ApiService, SensorHistoryResponse } from '../../../services/api.service';
 import { FarmService } from '../../../services/farm.service';
 import { HighlightStatusDirective } from '../../../directives/highlight-status.directive';
 
@@ -21,6 +42,8 @@ interface IrrigationStatus {
   [key: string]: unknown;
 }
 
+Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend, Filler);
+
 @Component({
   selector: 'app-farm-detail',
   standalone: true,
@@ -29,10 +52,18 @@ interface IrrigationStatus {
   styleUrl: './farm-detail.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class FarmDetail implements OnInit, OnDestroy {
+export class FarmDetail implements OnInit, AfterViewInit, OnDestroy {
+  @ViewChild('soilMoistureChart')
+  private soilMoistureChartCanvas?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('temperatureChart')
+  private temperatureChartCanvas?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('humidityChart')
+  private humidityChartCanvas?: ElementRef<HTMLCanvasElement>;
+
   farm: Farm | null = null;
   insights: FarmInsights | null = null;
   irrigation: IrrigationStatus | null = null;
+  sensorHistory: SensorHistoryResponse | null = null;
   loading = true;
   error = false;
   errorMessage = '';
@@ -44,6 +75,10 @@ export class FarmDetail implements OnInit, OnDestroy {
   newSensor: FarmSensor = { sensor_id: '', type: '' };
   sensorMessage = '';
   generatingDemoSensors = false;
+  chartMessage = '';
+  private chartsReady = false;
+  private sensorCharts: Chart[] = [];
+  private chartRenderTimer: number | undefined;
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -69,9 +104,18 @@ export class FarmDetail implements OnInit, OnDestroy {
     this.loadFarmData();
   }
 
+  ngAfterViewInit(): void {
+    this.chartsReady = true;
+    this.scheduleChartRender();
+  }
+
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    if (this.chartRenderTimer !== undefined) {
+      window.clearTimeout(this.chartRenderTimer);
+    }
+    this.destroyCharts();
   }
 
   private loadFarmData(): void {
@@ -91,6 +135,9 @@ export class FarmDetail implements OnInit, OnDestroy {
       irrigation: this.farmService.checkIrrigation(this.farmId).pipe(
         catchError(() => of(null))
       ),
+      sensorHistory: this.farmService.getSensorHistory(this.farmId).pipe(
+        catchError(() => of(null))
+      ),
     })
     .pipe(takeUntil(this.destroy$))
     .subscribe({
@@ -98,8 +145,13 @@ export class FarmDetail implements OnInit, OnDestroy {
         this.farm = { ...data.farm, sensors: data.sensors };
         this.insights = data.insights?.dashboard_data as FarmInsights | null;
         this.irrigation = data.irrigation as IrrigationStatus;
+        this.sensorHistory = data.sensorHistory as SensorHistoryResponse | null;
+        this.chartMessage = this.sensorHistory?.data_source === 'simulated_from_latest'
+          ? 'Showing simulated trend data from current sensor values.'
+          : '';
         this.loading = false;
         this.cdr.markForCheck();  
+        this.scheduleChartRender();
       },
       error: (err) => {
         this.error = true;
@@ -194,6 +246,123 @@ export class FarmDetail implements OnInit, OnDestroy {
     const unit = typeof sensor.unit === 'string' ? sensor.unit : '';
 
     return value === undefined || value === null ? 'No reading' : `${value}${unit}`;
+  }
+
+  private scheduleChartRender(): void {
+    if (!this.chartsReady || !this.sensorHistory) {
+      return;
+    }
+
+    if (this.chartRenderTimer !== undefined) {
+      window.clearTimeout(this.chartRenderTimer);
+    }
+
+    this.chartRenderTimer = window.setTimeout(() => this.renderSensorCharts(), 80);
+  }
+
+  private renderSensorCharts(): void {
+    if (
+      !this.sensorHistory ||
+      !this.soilMoistureChartCanvas ||
+      !this.temperatureChartCanvas ||
+      !this.humidityChartCanvas
+    ) {
+      return;
+    }
+
+    this.destroyCharts();
+    const labels = this.sensorHistory.timestamps.map((timestamp) =>
+      timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+    );
+
+    this.sensorCharts = [
+      this.createLineChart(
+        this.soilMoistureChartCanvas.nativeElement,
+        'Soil moisture',
+        labels,
+        this.sensorHistory.series.soil_moisture,
+        '#0d9488',
+        '%'
+      ),
+      this.createLineChart(
+        this.temperatureChartCanvas.nativeElement,
+        'Temperature',
+        labels,
+        this.sensorHistory.series.temperature,
+        '#dc2626',
+        '°C'
+      ),
+      this.createLineChart(
+        this.humidityChartCanvas.nativeElement,
+        'Humidity',
+        labels,
+        this.sensorHistory.series.humidity,
+        '#2563eb',
+        '%'
+      ),
+    ];
+  }
+
+  private createLineChart(
+    canvas: HTMLCanvasElement,
+    label: string,
+    labels: string[],
+    values: Array<number | null>,
+    color: string,
+    unit: string
+  ): Chart {
+    const config: ChartConfiguration<'line'> = {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label,
+            data: values,
+            borderColor: color,
+            backgroundColor: `${color}22`,
+            pointBackgroundColor: color,
+            pointRadius: 3,
+            tension: 0.35,
+            fill: true,
+            spanGaps: true,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (context) => `${label}: ${context.parsed.y}${unit}`,
+            },
+          },
+        },
+        scales: {
+          y: {
+            beginAtZero: false,
+            ticks: {
+              callback: (value) => `${value}${unit}`,
+            },
+          },
+          x: {
+            ticks: {
+              maxRotation: 0,
+              autoSkip: true,
+            },
+          },
+        },
+      },
+    };
+
+    return new Chart(canvas, config);
+  }
+
+  private destroyCharts(): void {
+    this.sensorCharts.forEach((chart) => chart.destroy());
+    this.sensorCharts = [];
   }
 
   showToast(message: string, type: 'success' | 'danger'): void {

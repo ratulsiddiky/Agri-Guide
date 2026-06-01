@@ -1,0 +1,39 @@
+.sensor-trends-card {
+  overflow: hidden;
+}
+
+.sensor-trends-card:hover {
+  transform: none;
+}
+
+.trend-chart-panel {
+  height: 100%;
+  padding: 0.85rem;
+  border: 1px solid rgba(22, 101, 52, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.trend-chart-panel h6 {
+  margin: 0 0 0.75rem;
+  color: #166534;
+  font-weight: 700;
+}
+
+.trend-chart {
+  position: relative;
+  width: 100%;
+  height: 240px;
+}
+
+.trend-chart canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+@media (max-width: 768px) {
+  .trend-chart {
+    height: 220px;
+  }
+}

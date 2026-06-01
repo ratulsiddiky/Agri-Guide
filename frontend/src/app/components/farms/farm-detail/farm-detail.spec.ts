@@ -20,6 +20,18 @@ describe('FarmDetail', () => {
         of({ dashboard_data: { average_temp: 18, average_wind: 6 } } as never),
       checkIrrigation: () => of({ status: 'OK', moisture: 44 } as never),
       getFarmSensors: () => of([] as never),
+      getSensorHistory: () =>
+        of({
+          farm_id: 'farm-1',
+          farm_name: 'North Field',
+          timestamps: ['2026-06-01T08:00:00+00:00', '2026-06-01T09:00:00+00:00'],
+          series: {
+            soil_moisture: [44, 46],
+            temperature: [20, 21],
+            humidity: [60, 62],
+          },
+          data_source: 'stored_sensor_readings',
+        } as never),
       generateDemoSensors: () => of({ count: 5, sensors: [] } as never),
       syncWeather: (id: string) => {
         syncWeatherCalledWith = id;

@@ -236,6 +236,17 @@ export class FarmService {
     );
   }
 
+  getSensorHistory(id: string) {
+    return this.api.getSensorHistory(id).pipe(
+      catchError((error) =>
+        this.rethrowAsHttpError(
+          error,
+          `Unable to load sensor history for farm '${id}'. Please try again.`
+        )
+      )
+    );
+  }
+
   /**
    * Sends an admin broadcast alert for farms inside the provided danger zone.
    */
