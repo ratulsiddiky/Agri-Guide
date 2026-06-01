@@ -5,6 +5,8 @@ import {
   OnDestroy,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
+  ElementRef,
+  ViewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -23,7 +25,7 @@ declare global {
 }
 
 interface LeafletApi {
-  map: (elementId: string, options?: Record<string, unknown>) => LeafletMap;
+  map: (element: HTMLElement, options?: Record<string, unknown>) => LeafletMap;
   tileLayer: (urlTemplate: string, options?: Record<string, unknown>) => LeafletLayer;
   marker: (latLng: [number, number]) => LeafletMarker;
   featureGroup: (layers: LeafletMarker[]) => LeafletFeatureGroup;
@@ -35,6 +37,7 @@ interface LeafletMap {
   eachLayer: (callback: (layer: LeafletLayer) => void) => void;
   removeLayer: (layer: LeafletLayer) => void;
   fitBounds: (bounds: unknown, options?: Record<string, unknown>) => void;
+  invalidateSize: () => void;
   on: (eventName: string, handler: (event: LeafletPopupEvent) => void) => void;
 }
 
@@ -72,6 +75,9 @@ interface FarmMapPoint {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
+  @ViewChild('farmMap', { static: false })
+  private farmMapElement?: ElementRef<HTMLElement>;
+
   farms: Farm[] = [];
   mapFarms: Farm[] = [];
   query = '';
@@ -87,7 +93,10 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
   deletingFarmId = '';
   showMyFarms = false;
   private mapReady = false;
+  private mapDataLoaded = false;
   private leafletMap: LeafletMap | null = null;
+  private markerLayers: LeafletMarker[] = [];
+  private mapResizeTimer: number | undefined;
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -119,8 +128,12 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    if (this.mapResizeTimer !== undefined) {
+      window.clearTimeout(this.mapResizeTimer);
+    }
     this.leafletMap?.remove();
     this.leafletMap = null;
+    this.markerLayers = [];
   }
 
   toggleMyFarms(): void {
@@ -224,6 +237,7 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
       .subscribe({
         next: (response) => {
           this.mapFarms = response.data;
+          this.mapDataLoaded = true;
           this.mapMessage = this.mapFarms.length
             ? ''
             : 'Create a farm to see it on your map.';
@@ -231,6 +245,7 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
           this.cdr.markForCheck();
         },
         error: (err) => {
+          this.mapDataLoaded = true;
           this.mapMessage = this.getErrorMessage(
             err,
             'Unable to load your farm map right now.'
@@ -242,7 +257,7 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
 
 
   private renderFarmMap(): void {
-    if (!this.mapReady) {
+    if (!this.mapReady || !this.mapDataLoaded || !this.farmMapElement?.nativeElement) {
       return;
     }
 
@@ -254,7 +269,7 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
     }
 
     if (!this.leafletMap) {
-      this.leafletMap = leaflet.map('farm-map', {
+      this.leafletMap = leaflet.map(this.farmMapElement.nativeElement, {
         scrollWheelZoom: false,
       }).setView([54.6, -5.93], 6);
 
@@ -278,12 +293,8 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
       });
     }
 
-    this.leafletMap.eachLayer((layer) => {
-      const tileUrl = (layer as { _url?: string })._url;
-      if (!tileUrl) {
-        this.leafletMap?.removeLayer(layer);
-      }
-    });
+    this.markerLayers.forEach((marker) => this.leafletMap?.removeLayer(marker));
+    this.markerLayers = [];
 
     const points = this.mapFarms.map((farm) => this.farmMapPoint(farm));
     const markers = points.map((point) =>
@@ -292,6 +303,7 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
         .bindPopup(this.markerPopup(point))
         .addTo(this.leafletMap as LeafletMap) as LeafletMarker
     );
+    this.markerLayers = markers;
 
     if (markers.length > 0) {
       this.leafletMap.fitBounds(leaflet.featureGroup(markers).getBounds(), {
@@ -302,6 +314,19 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
         ? 'Some markers use approximate demo coordinates.'
         : '';
     }
+
+    this.scheduleMapResize();
+  }
+
+
+  private scheduleMapResize(): void {
+    if (this.mapResizeTimer !== undefined) {
+      window.clearTimeout(this.mapResizeTimer);
+    }
+
+    this.mapResizeTimer = window.setTimeout(() => {
+      this.leafletMap?.invalidateSize();
+    }, 120);
   }
 
 

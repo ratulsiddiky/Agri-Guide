@@ -102,7 +102,12 @@
         </button>
       </div>
 
-      <div id="farm-map" class="farm-map" aria-label="Map of your farms"></div>
+      <div
+        #farmMap
+        id="farm-map"
+        class="farm-map"
+        aria-label="Map of your farms"
+      ></div>
       @if (mapMessage) {
         <p class="map-message mb-0 mt-2">{{ mapMessage }}</p>
       }
