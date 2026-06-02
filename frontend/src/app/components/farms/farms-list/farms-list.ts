@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as L from 'leaflet';
@@ -72,7 +72,6 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
   constructor(
     private readonly farmService: FarmService,
     public readonly authService: AuthService,
-    private readonly router: Router,
     private readonly cdr: ChangeDetectorRef
   ) {}
 
@@ -251,17 +250,6 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
         })
         .addTo(this.leafletMap);
 
-      this.leafletMap.on('popupopen', (event: L.PopupEvent) => {
-        const button = event.popup?.getElement()?.querySelector<HTMLButtonElement>(
-          '[data-farm-id]'
-        );
-        button?.addEventListener('click', () => {
-          const farmId = button.dataset['farmId'];
-          if (farmId) {
-            void this.router.navigate(['/farms', farmId]);
-          }
-        });
-      });
     }
 
     this.markerLayers.forEach((marker) => this.leafletMap?.removeLayer(marker));
@@ -379,9 +367,9 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
         <span>Crop: ${cropType}</span>
         <span>Soil moisture: ${moisture}</span>
         ${locationLabel}
-        <button type="button" class="map-popup-link" data-farm-id="${farmId}">
+        <a class="map-popup-link" href="/farms/${farmId}">
           View farm details
-        </button>
+        </a>
       </div>
     `;
   }

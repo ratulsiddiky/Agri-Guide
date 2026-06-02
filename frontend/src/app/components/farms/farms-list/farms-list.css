@@ -104,6 +104,9 @@
 }
 
 :host ::ng-deep .map-popup-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   margin-top: 0.35rem;
   padding: 0.35rem 0.6rem;
   border: 0;
@@ -112,6 +115,12 @@
   color: #ffffff;
   font-size: 0.82rem;
   font-weight: 700;
+  text-decoration: none;
+}
+
+:host ::ng-deep .map-popup-link:hover {
+  color: #ffffff;
+  background: #15803d;
 }
 
 @media (max-width: 768px) {
