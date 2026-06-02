@@ -31,6 +31,13 @@ export const protectedRoutes: Routes = [
           ),
       },
       {
+        path: 'ai/crop-scan',
+        loadComponent: () =>
+          import('./components/ai/crop-scan/crop-scan').then(
+            (m) => m.CropScan
+          ),
+      },
+      {
         path: 'farms/new',
         loadComponent: () =>
           import('./components/farms/farm-form/farm-form').then(

@@ -130,6 +130,35 @@ export interface CropDetectionResponse {
   timestamp: string;
 }
 
+export interface CropScanResponse {
+  scan_id: string;
+  farm_id?: string | null;
+  crop_type?: string | null;
+  model_mode: 'simulated_ai';
+  model_type: 'crop_leaf_health_classifier';
+  future_upgrade_model: string;
+  label: string;
+  confidence: number;
+  severity: string;
+  recommendation: string;
+  prevention_steps: string[];
+  latency_ms: number;
+  image_metadata: {
+    filename: string;
+    content_type?: string | null;
+    width?: number | null;
+    height?: number | null;
+    format?: string | null;
+  };
+  timestamp: string;
+}
+
+export interface CropScanListResponse {
+  farm_id?: string;
+  count: number;
+  scans: CropScanResponse[];
+}
+
 export interface IrrigationDecisionResponse {
   soil_moisture_percent: number;
   temperature_c: number;
@@ -308,6 +337,18 @@ export class ApiService {
 
   detectCropDisease() {
     return this.http.post<CropDetectionResponse>(`${this.baseUrl}/ai/detect`, {});
+  }
+
+  scanCropHealth(formData: FormData) {
+    return this.http.post<CropScanResponse>(`${this.baseUrl}/ai/crop-scan`, formData);
+  }
+
+  getCropScans() {
+    return this.http.get<CropScanListResponse>(`${this.baseUrl}/ai/scans`);
+  }
+
+  getFarmCropScans(id: string) {
+    return this.http.get<CropScanListResponse>(`${this.baseUrl}/farms/${id}/ai-scans`);
   }
 
   getIrrigationDecision() {

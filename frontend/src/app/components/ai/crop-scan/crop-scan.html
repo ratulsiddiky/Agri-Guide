@@ -1,0 +1,151 @@
+<main class="crop-scan-page">
+  <section class="scan-header">
+    <div>
+      <p class="eyebrow">AI Crop Scan</p>
+      <h1>Crop health image scan</h1>
+      <p>Upload a crop or leaf image to get a simulated diagnosis, confidence score, and practical next steps.</p>
+    </div>
+    <a routerLink="/farms" class="btn btn-outline-success btn-sm">Back to farms</a>
+  </section>
+
+  <section class="scan-grid">
+    <article class="scan-card">
+      <div class="scan-card-header">
+        <div>
+          <p class="eyebrow">Upload</p>
+          <h2>New scan</h2>
+        </div>
+        <span class="mode-badge">simulated_ai</span>
+      </div>
+
+      @if (errorMessage) {
+        <div class="alert alert-danger py-2">{{ errorMessage }}</div>
+      }
+      @if (successMessage) {
+        <div class="alert alert-success py-2">{{ successMessage }}</div>
+      }
+
+      <div class="mb-3">
+        <label for="cropImage" class="form-label">Crop or leaf image</label>
+        <input
+          id="cropImage"
+          class="form-control"
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          (change)="onFileSelected($event)"
+        />
+        <small class="text-muted">
+          {{ selectedFileName || 'JPG, PNG, or WebP up to 5 MB.' }}
+        </small>
+      </div>
+
+      <div class="mb-3">
+        <label for="farmSelect" class="form-label">Farm</label>
+        <select id="farmSelect" class="form-select" [(ngModel)]="selectedFarmId" [disabled]="loadingFarms">
+          <option value="">No farm selected</option>
+          @for (farm of farms; track farm._id || farm.id || farm.farm_name) {
+            <option [value]="farm._id || farm.id">
+              {{ farm.farm_name || farm.name || 'Unnamed farm' }}
+            </option>
+          }
+        </select>
+      </div>
+
+      <div class="mb-4">
+        <label for="cropType" class="form-label">Crop type</label>
+        <input
+          id="cropType"
+          class="form-control"
+          type="text"
+          placeholder="e.g. Tomato, Wheat, Potato"
+          [(ngModel)]="cropType"
+        />
+      </div>
+
+      <button class="btn btn-success w-100" type="button" (click)="submitScan()" [disabled]="scanning">
+        @if (scanning) {
+          <span class="spinner-border spinner-border-sm me-2"></span>
+        }
+        {{ scanning ? 'Scanning image...' : 'Scan crop health' }}
+      </button>
+    </article>
+
+    <article class="scan-card result-card">
+      <div class="scan-card-header">
+        <div>
+          <p class="eyebrow">Diagnosis</p>
+          <h2>Latest result</h2>
+        </div>
+      </div>
+
+      @if (result) {
+        <div class="diagnosis">
+          <span class="severity" [ngClass]="'severity-' + result.severity">{{ result.severity }}</span>
+          <h3>{{ result.label }}</h3>
+          <p>{{ result.recommendation }}</p>
+        </div>
+
+        <div class="metric-row">
+          <span>Confidence</span>
+          <strong>{{ confidencePercent(result) }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>Latency</span>
+          <strong>{{ result.latency_ms }} ms</strong>
+        </div>
+        <div class="metric-row">
+          <span>Model</span>
+          <strong>{{ result.model_mode }}</strong>
+        </div>
+
+        <h4>Prevention steps</h4>
+        <ul class="steps-list">
+          @for (step of result.prevention_steps; track step) {
+            <li>{{ step }}</li>
+          }
+        </ul>
+
+        <small class="text-muted">
+          Upgrade path: {{ result.future_upgrade_model }}
+        </small>
+      } @else {
+        <div class="empty-result">
+          <h3>No scan result yet</h3>
+          <p>Select an image and start a scan to see the diagnosis here.</p>
+        </div>
+      }
+    </article>
+  </section>
+
+  <section class="scan-card history-card">
+    <div class="scan-card-header">
+      <div>
+        <p class="eyebrow">History</p>
+        <h2>Previous crop scans</h2>
+      </div>
+      @if (loadingHistory) {
+        <span class="text-muted small">Loading...</span>
+      }
+    </div>
+
+    @if (history.length > 0) {
+      <div class="history-list">
+        @for (scan of history; track scan.scan_id) {
+          <article class="history-item">
+            <div>
+              <strong>{{ scan.label }}</strong>
+              <span>{{ farmName(scan.farm_id) }} · {{ scan.crop_type || 'Crop not specified' }}</span>
+              <small>{{ scan.image_metadata.filename }} · {{ scan.timestamp | date:'short' }}</small>
+            </div>
+            <div class="history-score">
+              <span>{{ confidencePercent(scan) }}</span>
+              <small>{{ scan.severity }}</small>
+            </div>
+          </article>
+        }
+      </div>
+    } @else {
+      <p class="text-muted mb-0">No previous scans yet.</p>
+    }
+  </section>
+</main>

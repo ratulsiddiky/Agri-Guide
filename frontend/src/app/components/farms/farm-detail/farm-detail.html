@@ -27,6 +27,12 @@
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
       <h2 class="text-success mb-0">🚜 {{ farm.farm_name }}</h2>
       <div class="d-flex gap-2">
+        <a
+          routerLink="/ai/crop-scan"
+          [queryParams]="{ farm_id: farm._id, crop_type: farm.crop_type || '' }"
+          class="btn btn-success btn-sm">
+          AI Crop Scan
+        </a>
         <a [routerLink]="['/farms', farm._id, 'edit']" class="btn btn-outline-primary btn-sm">Edit Farm</a>
         <a routerLink="/farms" class="btn btn-outline-secondary btn-sm">← Back to All Farms</a>
       </div>
