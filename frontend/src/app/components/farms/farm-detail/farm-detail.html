@@ -222,6 +222,46 @@
         </div>
       </div>
 
+      <!-- Action Plan -->
+      <div class="col-md-6">
+        <div class="card shadow-sm border-success h-100">
+          <div class="card-header bg-success text-white">🗂️ Action Plan</div>
+          <div class="card-body">
+            @if (!actionPlan) {
+              <div class="text-center text-muted">Loading action plan…</div>
+            } @else {
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="mb-0">Priority</h6>
+                <span class="badge bg-danger" *ngIf="actionPlan.priority === 'high'">HIGH</span>
+                <span class="badge bg-warning text-dark" *ngIf="actionPlan.priority === 'medium'">MEDIUM</span>
+                <span class="badge bg-secondary" *ngIf="actionPlan.priority === 'low'">LOW</span>
+              </div>
+              <p class="small mb-2"><strong>Status:</strong> {{ actionPlan.overall_status }}</p>
+              <p class="small mb-2"><strong>Irrigation:</strong> {{ actionPlan.irrigation_advice }}</p>
+              <p class="small mb-2"><strong>Crop Health:</strong> {{ actionPlan.crop_health_advice }}</p>
+              <p class="small mb-2"><strong>Weather:</strong> {{ actionPlan.weather_advice }}</p>
+
+              <div *ngIf="actionPlan.recommended_actions?.length">
+                <h6 class="mt-2">Recommended Actions</h6>
+                <ul>
+                  <li *ngFor="let a of actionPlan.recommended_actions">{{ a }}</li>
+                </ul>
+              </div>
+
+              <div *ngIf="actionPlan.reasons?.length">
+                <h6 class="mt-2">Reasons</h6>
+                <ul>
+                  <li *ngFor="let r of actionPlan.reasons">{{ r }}</li>
+                </ul>
+              </div>
+
+              <p class="small text-muted mt-2 mb-0"><strong>Data sources:</strong> {{ actionPlan.data_sources?.join(', ') }}</p>
+              <p class="small text-muted mb-0"><strong>Confidence:</strong> {{ actionPlan.confidence }}</p>
+            }
+          </div>
+        </div>
+      </div>
+
       <!-- Sensors -->
       <div class="col-12">
         <div class="card shadow-sm">

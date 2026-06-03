@@ -894,6 +894,127 @@ def get_sensor_history(current_user, farm_id):
     return make_response(jsonify(serialize_document(_sensor_history_payload(farm))), 200)
 
 
+@farms_bp.route("/api/farms/<farm_id>/action-plan", methods=["GET"])
+@jwt_required
+def get_action_plan(current_user, farm_id):
+    farm, error_response = get_farm_if_authorised(farm_id, current_user)
+    if error_response:
+        return error_response
+
+    plan = {
+        "farm_id": str(farm.get("_id")),
+        "farm_name": farm.get("farm_name", "Farm"),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "priority": "low",
+        "overall_status": "No urgent actions detected",
+        "irrigation_advice": "No data",
+        "crop_health_advice": "No data",
+        "weather_advice": "No data",
+        "sensor_advice": "No data",
+        "recommended_actions": [],
+        "reasons": [],
+        "data_sources": [],
+        "confidence": "low",
+    }
+
+    # Latest sensors
+    sensors = farm.get("sensors", []) or []
+    sensor_map = { _sensor_type(s): s for s in sensors }
+    soil = sensor_map.get("soil_moisture")
+    soil_val = _sensor_numeric_value(soil) if soil else None
+    if soil is not None:
+        plan["data_sources"].append("sensors")
+        plan["sensor_advice"] = _format_sensor_value(soil)
+
+    # Sensor history
+    history = _sensor_history_payload(farm)
+    if history.get("data_source"):
+        plan["data_sources"].append(history["data_source"])
+
+    # Weather
+    lat, lng, loc_src = _farm_coordinates(farm)
+    try:
+        weather_url = (
+            "https://api.open-meteo.com/v1/forecast"
+            f"?latitude={lat}&longitude={lng}&current_weather=true"
+        )
+        resp = requests.get(weather_url, timeout=3)
+        resp.raise_for_status()
+        weather_payload = _open_meteo_weather_payload(farm, lat, lng, loc_src, resp.json())
+        plan["data_sources"].append("open_meteo_current_weather")
+    except Exception:
+        weather_payload = _fallback_weather_payload(farm, lat, lng, loc_src)
+        plan["data_sources"].append("fallback_simulated_weather")
+
+    plan["weather_advice"] = (
+        f"Current: {weather_payload.get('condition_summary')}. "
+        f"Temp {weather_payload.get('temperature_c')}°C."
+    )
+
+    # AI scan influence
+    latest_scan = config.get_db().ai_scans.find_one({"farm_id": str(farm.get("_id"))}, sort=[("created_at", -1)])
+    if latest_scan:
+        plan["data_sources"].append("ai_scan")
+        prediction = latest_scan.get("prediction", {})
+        label = prediction.get("label") or latest_scan.get("recommendation")
+        severity = prediction.get("severity") or prediction.get("severity")
+        plan["crop_health_advice"] = label or "AI scan available"
+        if prediction.get("severity") == "high" or prediction.get("severity") == "medium":
+            plan["recommended_actions"].append("Inspect crop area highlighted by latest AI scan and act on recommendations.")
+            plan["reasons"].append(f"AI scan detected: {label}")
+
+    # Irrigation logic
+    precip = weather_payload.get("precipitation_mm") or 0
+    if soil_val is None:
+        plan["irrigation_advice"] = "Soil moisture data missing. Check sensors or take manual reading."
+        plan["recommended_actions"].append("Verify soil moisture with sensor or manual probe.")
+        plan["reasons"].append("No recent soil moisture sensor available")
+        plan["priority"] = "medium"
+    else:
+        try:
+            moisture = float(soil_val)
+        except Exception:
+            moisture = None
+
+        if moisture is None:
+            plan["irrigation_advice"] = "Invalid soil moisture reading"
+        else:
+            if moisture < 25 and (precip or 0) < 1.0:
+                plan["irrigation_advice"] = "Irrigate today — soil moisture is low."
+                plan["recommended_actions"].append("Irrigate affected zones today to reach optimal moisture.")
+                plan["reasons"].append(f"Low soil moisture: {moisture}")
+                plan["priority"] = "high"
+            elif moisture < 40:
+                plan["irrigation_advice"] = "Consider irrigation in next 24-48 hours."
+                plan["recommended_actions"].append("Monitor soil moisture and irrigate if it falls below 30%.")
+                plan["reasons"].append(f"Moderate soil moisture: {moisture}")
+                if plan["priority"] != "high":
+                    plan["priority"] = "medium"
+            else:
+                plan["irrigation_advice"] = "Soil moisture is within acceptable range."
+
+    # Priority and overall status synthesis
+    if plan["priority"] == "high":
+        plan["overall_status"] = "High priority: immediate attention required"
+    elif plan["priority"] == "medium":
+        plan["overall_status"] = "Medium priority: monitor and act soon"
+    else:
+        plan["overall_status"] = "Low priority: routine monitoring"
+
+    # Confidence heuristics
+    confidence = "low"
+    if latest_scan and sensors and weather_payload:
+        confidence = "high"
+    elif sensors or latest_scan or weather_payload:
+        confidence = "medium"
+    plan["confidence"] = confidence
+
+    # Trim duplicates in data_sources
+    plan["data_sources"] = list(dict.fromkeys(plan["data_sources"]))
+
+    return make_response(jsonify(plan), 200)
+
+
 @farms_bp.route("/api/dashboard/summary", methods=["GET"])
 @jwt_required
 def get_dashboard_summary(current_user):

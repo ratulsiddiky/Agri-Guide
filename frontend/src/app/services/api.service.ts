@@ -310,6 +310,10 @@ export class ApiService {
     return this.http.get<FarmWeatherResponse>(`${this.baseUrl}/farms/${id}/weather`);
   }
 
+  getFarmActionPlan(id: string) {
+    return this.http.get<any>(`${this.baseUrl}/farms/${id}/action-plan`);
+  }
+
   broadcastAlert(payload: BroadcastAlertRequest) {
     return this.http.post<BroadcastAlertResponse>(
       `${this.baseUrl}/farms/alerts/broadcast`,

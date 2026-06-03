@@ -258,6 +258,17 @@ export class FarmService {
     );
   }
 
+  getActionPlan(id: string) {
+    return this.api.getFarmActionPlan(id).pipe(
+      catchError((error) =>
+        this.rethrowAsHttpError(
+          error,
+          `Unable to load action plan for farm '${id}'. Please try again.`
+        )
+      )
+    );
+  }
+
   /**
    * Sends an admin broadcast alert for farms inside the provided danger zone.
    */

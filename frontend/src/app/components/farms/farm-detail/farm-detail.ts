@@ -65,6 +65,7 @@ export class FarmDetail implements OnInit, AfterViewInit, OnDestroy {
   irrigation: IrrigationStatus | null = null;
   sensorHistory: SensorHistoryResponse | null = null;
   farmWeather: FarmWeatherResponse | null = null;
+  actionPlan: any = null;
   loading = true;
   error = false;
   errorMessage = '';
@@ -142,6 +143,7 @@ export class FarmDetail implements OnInit, AfterViewInit, OnDestroy {
       weather: this.farmService.getFarmWeather(this.farmId).pipe(
         catchError(() => of(null))
       ),
+      actionPlan: this.farmService.getActionPlan(this.farmId).pipe(catchError(() => of(null))),
     })
     .pipe(takeUntil(this.destroy$))
     .subscribe({
@@ -151,6 +153,7 @@ export class FarmDetail implements OnInit, AfterViewInit, OnDestroy {
         this.irrigation = data.irrigation as IrrigationStatus;
         this.sensorHistory = data.sensorHistory as SensorHistoryResponse | null;
         this.farmWeather = data.weather as FarmWeatherResponse | null;
+        this.actionPlan = data.actionPlan || null;
         this.chartMessage = this.sensorHistory?.data_source === 'simulated_from_latest'
           ? 'Showing simulated trend data from current sensor values.'
           : '';

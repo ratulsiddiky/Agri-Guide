@@ -545,3 +545,116 @@ def test_farm_weather_missing_coordinates_uses_fallback_safely(client, monkeypat
     assert payload["location_source"] == "approximate_demo_location"
     assert payload["data_source"] == "fallback_simulated_weather"
     assert payload["provider"] == "Open-Meteo"
+
+
+def test_action_plan_owner_can_access_and_gets_plan(client, monkeypatch):
+    token = _login_token(client)
+    owner = config.get_db().users.find_one({"username": "farmer_one"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {
+                "farm_name": "Action Farm",
+                "owner_id": owner["_id"],
+                "sensors": [
+                    {"sensor_id": "soil-001", "type": "soil_moisture", "readings": [{"value": 18}]}
+                ],
+                "weather_logs": [],
+                "alerts_history": [],
+            }
+        ).inserted_id
+    )
+
+    class _FakeWeatherResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"current": {"temperature_2m": 20, "relative_humidity_2m": 60, "wind_speed_10m": 5, "precipitation": 0.0, "rain": 0.0, "weather_code": 1}}
+
+    monkeypatch.setattr(farms_routes.requests, "get", lambda *args, **kwargs: _FakeWeatherResponse())
+
+    response = client.get(
+        f"/api/farms/{farm_id}/action-plan",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["farm_id"] == farm_id
+    assert payload["priority"] in ("high", "medium", "low")
+    assert "irrigation_advice" in payload
+
+
+def test_action_plan_blocks_other_user(client):
+    _login_token(client, username="owner_user")
+    intruder_token = _login_token(client, username="intruder_user")
+    owner = config.get_db().users.find_one({"username": "owner_user"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {"farm_name": "Private Action Farm", "owner_id": owner["_id"], "sensors": [], "weather_logs": [], "alerts_history": []}
+        ).inserted_id
+    )
+
+    response = client.get(
+        f"/api/farms/{farm_id}/action-plan",
+        headers={"Authorization": f"Bearer {intruder_token}"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_action_plan_missing_sensors_returns_partial_plan(client, monkeypatch):
+    token = _login_token(client)
+    owner = config.get_db().users.find_one({"username": "farmer_one"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {"farm_name": "NoSensor Farm", "owner_id": owner["_id"], "sensors": [], "weather_logs": [], "alerts_history": []}
+        ).inserted_id
+    )
+
+    def _raise_request_error(*args, **kwargs):
+        raise farms_routes.requests.RequestException("Open-Meteo unavailable")
+
+    monkeypatch.setattr(farms_routes.requests, "get", _raise_request_error)
+
+    response = client.get(
+        f"/api/farms/{farm_id}/action-plan",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["irrigation_advice"].startswith("Soil moisture data missing")
+
+
+def test_action_plan_ai_scan_influences_recommendation(client, monkeypatch):
+    token = _login_token(client)
+    owner = config.get_db().users.find_one({"username": "farmer_one"})
+    farm_id = config.get_db().farms.insert_one(
+        {"farm_name": "AI Farm", "owner_id": owner["_id"], "sensors": [{"sensor_id": "soil-1", "type": "soil_moisture", "readings": [{"value": 35}]}], "weather_logs": [], "alerts_history": []}
+    ).inserted_id
+
+    # insert ai scan indicating water stress
+    config.get_db().ai_scans.insert_one({
+        "user_id": str(owner["_id"]),
+        "farm_id": str(farm_id),
+        "prediction": {"label": "Water Stress Signs", "severity": "high", "confidence": 0.85},
+        "recommendation": "Check irrigation coverage",
+        "created_at": __import__("datetime").datetime.utcnow(),
+    })
+
+    class _FakeWeatherResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"current": {"temperature_2m": 22, "relative_humidity_2m": 60, "wind_speed_10m": 5, "precipitation": 0.0, "rain": 0.0, "weather_code": 1}}
+
+    monkeypatch.setattr(farms_routes.requests, "get", lambda *args, **kwargs: _FakeWeatherResponse())
+
+    response = client.get(f"/api/farms/{str(farm_id)}/action-plan", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    payload = response.get_json()
+    # AI scan should be included as a data source and its detection mentioned in reasons
+    assert "ai_scan" in payload["data_sources"]
+    assert any("AI scan detected" in r or "Water Stress" in r for r in payload["reasons"]) or any("AI scan" in a for a in payload["recommended_actions"])
