@@ -258,6 +258,17 @@ export class FarmService {
     );
   }
 
+  addSensorReading(id: string, payload: { sensor_type: string; value: number; unit: string; notes?: string }) {
+    return this.api.addSensorReading(id, payload).pipe(
+      catchError((error) =>
+        this.rethrowAsHttpError(
+          error,
+          `Unable to add the sensor reading for farm '${id}'. Please try again.`
+        )
+      )
+    );
+  }
+
   getActionPlan(id: string) {
     return this.api.getFarmActionPlan(id).pipe(
       catchError((error) =>

@@ -8,6 +8,7 @@ from pymongo.errors import PyMongoError
 from blueprints.farms.models import (
     validate_alert_payload,
     validate_farm_payload,
+    validate_sensor_reading_payload,
     validate_sensor_payload,
 )
 import config
@@ -113,6 +114,81 @@ def _format_sensor_value(sensor):
             value = latest.get("value")
     unit = sensor.get("unit", "")
     return f"{value}{unit}" if value is not None else "No reading"
+
+
+def _latest_sensor_reading(sensor):
+    readings = sensor.get("readings", [])
+    if isinstance(readings, list) and readings:
+        latest = readings[-1]
+        if isinstance(latest, dict):
+            return latest
+    return None
+
+
+def _normalise_sensor_reading_entry(farm_id, current_user, sensor_type, value, unit, notes=None):
+    timestamp = datetime.now(timezone.utc)
+    return {
+        "farm_id": str(farm_id),
+        "user_id": str(current_user["_id"]),
+        "username": current_user.get("username"),
+        "sensor_type": sensor_type,
+        "value": value,
+        "unit": unit,
+        "notes": notes,
+        "timestamp": timestamp,
+        "source": "manual_sensor_reading",
+    }
+
+
+def _manual_sensor_id(sensor_type, farm_id):
+    return f"MANUAL-{sensor_type.upper()}-{str(farm_id)[-6:]}"
+
+
+def _upsert_manual_sensor_reading(farm, current_user, reading):
+    sensor_type = reading["sensor_type"]
+    reading_entry = _normalise_sensor_reading_entry(
+        farm["_id"],
+        current_user,
+        sensor_type,
+        reading["value"],
+        reading["unit"],
+        reading.get("notes"),
+    )
+
+    sensors = list(farm.get("sensors", []))
+    target_sensor = None
+    for sensor in sensors:
+        if _sensor_type(sensor) == sensor_type:
+            target_sensor = sensor
+            break
+
+    if target_sensor is None:
+        target_sensor = {
+            "sensor_id": _manual_sensor_id(sensor_type, farm["_id"]),
+            "farm_id": str(farm["_id"]),
+            "user_id": str(current_user["_id"]),
+            "type": sensor_type,
+            "value": reading["value"],
+            "unit": reading["unit"],
+            "status": "active",
+            "timestamp": reading_entry["timestamp"],
+            "source": "manual_sensor_reading",
+            "notes": reading.get("notes"),
+            "readings": [reading_entry],
+        }
+        sensors.append(target_sensor)
+    else:
+        readings = list(target_sensor.get("readings", []))
+        readings.append(reading_entry)
+        target_sensor["readings"] = readings
+        target_sensor["value"] = reading["value"]
+        target_sensor["unit"] = reading["unit"]
+        target_sensor["timestamp"] = reading_entry["timestamp"]
+        target_sensor["user_id"] = str(current_user["_id"])
+        target_sensor["source"] = "manual_sensor_reading"
+        target_sensor["notes"] = reading.get("notes")
+
+    return sensors, reading_entry, target_sensor
 
 
 def _iso_timestamp(value):
@@ -533,6 +609,41 @@ def add_sensor(current_user, farm_id):
 
     _farms_collection().update_one({"_id": ObjectId(farm_id)}, {"$push": {"sensors": sensor}})
     return make_response(jsonify({"message": "Sensor added to farm!", "sensor": sensor}), 201)
+
+
+@farms_bp.route("/api/farms/<farm_id>/sensors/readings", methods=["POST"])
+@jwt_required
+def add_sensor_reading(current_user, farm_id):
+    farm, error_response = get_farm_if_authorised(farm_id, current_user)
+    if error_response:
+        return error_response
+
+    reading, error = validate_sensor_reading_payload(request.get_json(silent=True))
+    if error:
+        return _error_response(
+            f"Unable to add sensor reading to farm '{farm_id}': {error}",
+            400,
+        )
+
+    sensors, reading_entry, updated_sensor = _upsert_manual_sensor_reading(farm, current_user, reading)
+    update_fields = {
+        "sensors": sensors,
+        "updated_at": datetime.now(timezone.utc),
+    }
+    _farms_collection().update_one({"_id": ObjectId(farm_id)}, {"$set": update_fields})
+
+    return make_response(
+        jsonify(
+            {
+                "message": "Sensor reading added successfully.",
+                "farm_id": str(farm_id),
+                "sensor_type": reading["sensor_type"],
+                "reading": serialize_document(reading_entry),
+                "sensor": serialize_document(updated_sensor),
+            }
+        ),
+        201,
+    )
 
 
 @farms_bp.route("/api/farms/<farm_id>/sensors", methods=["GET"])

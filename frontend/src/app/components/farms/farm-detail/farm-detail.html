@@ -1,7 +1,7 @@
 <div class="container mt-4">
 
   @if (toastMessage) {
-    <div class="position-fixed top-0 end-0 p-3" style="z-index: 1080;">
+    <div class="position-fixed top-0 end-0 p-3 farm-detail-toast">
       <div class="toast show text-white border-0" [class.bg-success]="toastType === 'success'" [class.bg-danger]="toastType === 'danger'" role="status" aria-live="polite">
         <div class="d-flex">
           <div class="toast-body">{{ toastMessage }}</div>
@@ -76,12 +76,10 @@
           <div class="card-body">
             @if (farm.alerts_history && farm.alerts_history.length > 0) {
               <ul class="list-group list-group-flush">
-                @for (alert of farm.alerts_history; track $index) {
-                  <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                    <span class="badge bg-danger">{{ alert.alert_type }}</span>
-                    <small class="text-muted">{{ alert.timestamp | date:'short' }}</small>
-                  </li>
-                }
+                <li class="list-group-item d-flex justify-content-between align-items-center px-0" *ngFor="let alert of farm.alerts_history">
+                  <span class="badge bg-danger">{{ alert.alert_type }}</span>
+                  <small class="text-muted">{{ alert.timestamp | date:'short' }}</small>
+                </li>
               </ul>
             } @else {
               <p class="text-success mb-0">✅ No active alerts — all clear!</p>
@@ -227,8 +225,10 @@
         <div class="card shadow-sm border-success h-100">
           <div class="card-header bg-success text-white">🗂️ Action Plan</div>
           <div class="card-body">
-            @if (!actionPlan) {
+            @if (actionPlanLoading) {
               <div class="text-center text-muted">Loading action plan…</div>
+            } @else if (!actionPlan) {
+              <div class="text-muted">No action plan is available for this farm right now.</div>
             } @else {
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <h6 class="mb-0">Priority</h6>
@@ -284,6 +284,77 @@
           </div>
 
           <div class="card-body">
+
+            <div class="mb-4 p-3 bg-light rounded border">
+              <h6 class="text-secondary mb-3">Add Sensor Reading</h6>
+              <div class="row g-2 align-items-end">
+                <div class="col-md-3">
+                  <label class="form-label small mb-1">Sensor Type</label>
+                  <select
+                    class="form-select form-select-sm"
+                    aria-label="Sensor type"
+                    title="Sensor type"
+                    [(ngModel)]="sensorReadingForm.sensor_type"
+                    (ngModelChange)="onSensorReadingTypeChange()">
+                    <option value="soil_moisture">Soil Moisture</option>
+                    <option value="temperature">Temperature</option>
+                    <option value="humidity">Humidity</option>
+                    <option value="light">Light</option>
+                    <option value="ph">pH</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label small mb-1">Value</label>
+                  <input
+                    type="number"
+                    class="form-control form-control-sm"
+                    aria-label="Sensor reading value"
+                    title="Sensor reading value"
+                    [(ngModel)]="sensorReadingForm.value"
+                    placeholder="Enter value" />
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label small mb-1">Unit</label>
+                  <input
+                    type="text"
+                    class="form-control form-control-sm"
+                    aria-label="Sensor unit"
+                    title="Sensor unit"
+                    [(ngModel)]="sensorReadingForm.unit"
+                    readonly />
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small mb-1">Notes</label>
+                  <input
+                    type="text"
+                    class="form-control form-control-sm"
+                    aria-label="Reading notes"
+                    title="Reading notes"
+                    [(ngModel)]="sensorReadingForm.notes"
+                    placeholder="Optional notes" />
+                </div>
+                <div class="col-md-2">
+                  <button
+                    class="btn btn-success btn-sm w-100"
+                    (click)="addSensorReading()"
+                    [disabled]="sensorReadingLoading">
+                    @if (sensorReadingLoading) {
+                      <span class="spinner-border spinner-border-sm me-1"></span>
+                    }
+                    Save Reading
+                  </button>
+                </div>
+                @if (sensorReadingMessage) {
+                  <div class="col-12">
+                    <div class="alert py-2 small mb-0"
+                      [class.alert-success]="sensorReadingMessage.startsWith('Sensor reading added successfully')"
+                      [class.alert-danger]="!sensorReadingMessage.startsWith('Sensor reading added successfully')">
+                      {{ sensorReadingMessage }}
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
 
             @if (showSensorForm) {
               <div class="row g-2 mb-4 p-3 bg-light rounded">

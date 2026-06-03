@@ -42,6 +42,21 @@ interface IrrigationStatus {
   [key: string]: unknown;
 }
 
+interface SensorReadingFormState {
+  sensor_type: string;
+  value: string;
+  unit: string;
+  notes: string;
+}
+
+const SENSOR_READING_UNITS: Record<string, string> = {
+  soil_moisture: '%',
+  temperature: '°C',
+  humidity: '%',
+  light: 'lux',
+  ph: 'pH',
+};
+
 Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend, Filler);
 
 @Component({
@@ -66,6 +81,7 @@ export class FarmDetail implements OnInit, AfterViewInit, OnDestroy {
   sensorHistory: SensorHistoryResponse | null = null;
   farmWeather: FarmWeatherResponse | null = null;
   actionPlan: any = null;
+  actionPlanLoading = true;
   loading = true;
   error = false;
   errorMessage = '';
@@ -76,6 +92,14 @@ export class FarmDetail implements OnInit, AfterViewInit, OnDestroy {
   showSensorForm = false;
   newSensor: FarmSensor = { sensor_id: '', type: '' };
   sensorMessage = '';
+  sensorReadingForm: SensorReadingFormState = {
+    sensor_type: 'soil_moisture',
+    value: '',
+    unit: SENSOR_READING_UNITS['soil_moisture'],
+    notes: '',
+  };
+  sensorReadingLoading = false;
+  sensorReadingMessage = '';
   generatingDemoSensors = false;
   chartMessage = '';
   private chartsReady = false;
@@ -122,6 +146,7 @@ export class FarmDetail implements OnInit, AfterViewInit, OnDestroy {
 
   private loadFarmData(): void {
     this.loading = true;
+    this.actionPlanLoading = true;
     this.error = false;
     this.errorMessage = '';
     this.cdr.markForCheck(); 
@@ -158,6 +183,7 @@ export class FarmDetail implements OnInit, AfterViewInit, OnDestroy {
           ? 'Showing simulated trend data from current sensor values.'
           : '';
         this.loading = false;
+        this.actionPlanLoading = false;
         this.cdr.markForCheck();  
         this.scheduleChartRender();
       },
@@ -167,6 +193,7 @@ export class FarmDetail implements OnInit, AfterViewInit, OnDestroy {
           `Unable to load farm '${this.farmId}'. Please refresh and try again.`;
         console.error(this.errorMessage);
         this.loading = false;
+        this.actionPlanLoading = false;
         this.cdr.markForCheck(); 
       },
     });
@@ -219,6 +246,50 @@ export class FarmDetail implements OnInit, AfterViewInit, OnDestroy {
             this.api.getErrorMessage(err) ||
             `Unable to add the sensor to farm '${this.farmId}'. Please check the sensor details and try again.`;
           this.cdr.markForCheck(); 
+        },
+      });
+  }
+
+  onSensorReadingTypeChange(): void {
+    this.sensorReadingForm.unit = SENSOR_READING_UNITS[this.sensorReadingForm.sensor_type] || '';
+  }
+
+  addSensorReading(): void {
+    const numericValue = Number(this.sensorReadingForm.value);
+    if (!this.sensorReadingForm.sensor_type || Number.isNaN(numericValue)) {
+      this.sensorReadingMessage = 'Please choose a sensor type and enter a numeric value.';
+      return;
+    }
+
+    this.sensorReadingLoading = true;
+    this.sensorReadingMessage = '';
+    this.cdr.markForCheck();
+
+    this.farmService
+      .addSensorReading(this.farmId, {
+        sensor_type: this.sensorReadingForm.sensor_type,
+        value: numericValue,
+        unit: this.sensorReadingForm.unit,
+        notes: this.sensorReadingForm.notes.trim() || undefined,
+      })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          this.sensorReadingMessage = `Sensor reading added successfully for ${response.sensor_type}.`;
+          this.showToast(this.sensorReadingMessage, 'success');
+          this.sensorReadingLoading = false;
+          this.sensorReadingForm.value = '';
+          this.sensorReadingForm.notes = '';
+          this.cdr.markForCheck();
+          this.loadFarmData();
+        },
+        error: (err) => {
+          this.sensorReadingMessage =
+            this.api.getErrorMessage(err) ||
+            `Unable to add the sensor reading to farm '${this.farmId}'. Please check the value and try again.`;
+          this.showToast(this.sensorReadingMessage, 'danger');
+          this.sensorReadingLoading = false;
+          this.cdr.markForCheck();
         },
       });
   }

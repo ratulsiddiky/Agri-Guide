@@ -79,6 +79,10 @@
   height: 100%;
 }
 
+.farm-detail-toast {
+  z-index: 1080;
+}
+
 @media (max-width: 768px) {
   .trend-chart {
     height: 220px;

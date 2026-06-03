@@ -18,6 +18,11 @@ export interface FarmGeoLocation {
 
 export interface SensorReading {
   value?: string | number;
+  unit?: string;
+  timestamp?: string;
+  user_id?: string;
+  notes?: string;
+  source?: string;
   [key: string]: unknown;
 }
 

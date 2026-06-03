@@ -547,6 +547,117 @@ def test_farm_weather_missing_coordinates_uses_fallback_safely(client, monkeypat
     assert payload["provider"] == "Open-Meteo"
 
 
+def test_add_sensor_reading_updates_history_for_owner(client):
+    token = _login_token(client)
+    owner = config.get_db().users.find_one({"username": "farmer_one"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {
+                "farm_name": "Manual Reading Farm",
+                "owner_id": owner["_id"],
+                "sensors": [
+                    {
+                        "sensor_id": "soil-001",
+                        "type": "soil_moisture",
+                        "value": 48,
+                        "unit": "%",
+                        "status": "active",
+                        "readings": [
+                            {
+                                "value": 48,
+                                "unit": "%",
+                                "timestamp": "2026-06-01T08:00:00+00:00",
+                                "source": "auto_generated_demo_sensor",
+                            }
+                        ],
+                    }
+                ],
+                "weather_logs": [],
+                "alerts_history": [],
+            }
+        ).inserted_id
+    )
+
+    response = client.post(
+        f"/api/farms/{farm_id}/sensors/readings",
+        json={
+            "sensor_type": "soil_moisture",
+            "value": 32,
+            "unit": "%",
+            "notes": "Afternoon manual reading",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["farm_id"] == farm_id
+    assert payload["sensor_type"] == "soil_moisture"
+    assert payload["reading"]["notes"] == "Afternoon manual reading"
+
+    history_response = client.get(
+        f"/api/farms/{farm_id}/sensor-history",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert history_response.status_code == 200
+    history = history_response.get_json()
+    assert history["data_source"] == "stored_sensor_readings"
+    assert history["series"]["soil_moisture"] == [48.0, 32.0]
+
+
+def test_add_sensor_reading_blocks_other_user(client):
+    _login_token(client, username="owner_user")
+    intruder_token = _login_token(client, username="intruder_user")
+    owner = config.get_db().users.find_one({"username": "owner_user"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {
+                "farm_name": "Private Manual Farm",
+                "owner_id": owner["_id"],
+                "sensors": [],
+                "weather_logs": [],
+                "alerts_history": [],
+            }
+        ).inserted_id
+    )
+
+    response = client.post(
+        f"/api/farms/{farm_id}/sensors/readings",
+        json={"sensor_type": "temperature", "value": 19, "unit": "°C"},
+        headers={"Authorization": f"Bearer {intruder_token}"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_add_sensor_reading_creates_sensor_when_missing(client):
+    token = _login_token(client)
+    owner = config.get_db().users.find_one({"username": "farmer_one"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {
+                "farm_name": "Blank Farm",
+                "owner_id": owner["_id"],
+                "sensors": [],
+                "weather_logs": [],
+                "alerts_history": [],
+            }
+        ).inserted_id
+    )
+
+    response = client.post(
+        f"/api/farms/{farm_id}/sensors/readings",
+        json={"sensor_type": "temperature", "value": 22, "unit": "°C"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 201
+    farm = config.get_db().farms.find_one({"_id": ObjectId(farm_id)})
+    assert farm["sensors"][0]["type"] == "temperature"
+    assert farm["sensors"][0]["readings"][-1]["value"] == 22
+
+
 def test_action_plan_owner_can_access_and_gets_plan(client, monkeypatch):
     token = _login_token(client)
     owner = config.get_db().users.find_one({"username": "farmer_one"})

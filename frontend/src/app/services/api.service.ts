@@ -112,6 +112,24 @@ export interface FarmWeatherResponse {
   data_source: 'open_meteo_current_weather' | 'fallback_simulated_weather';
 }
 
+export interface SensorReadingMutationResponse {
+  message: string;
+  farm_id: string;
+  sensor_type: string;
+  reading: {
+    farm_id: string;
+    user_id: string;
+    username?: string;
+    sensor_type: string;
+    value: number;
+    unit: string;
+    notes?: string | null;
+    timestamp: string;
+    source: string;
+  };
+  sensor: FarmSensor;
+}
+
 export interface CropDetectionResponse {
   mode: string;
   model_type: string;
@@ -308,6 +326,10 @@ export class ApiService {
 
   getFarmWeather(id: string) {
     return this.http.get<FarmWeatherResponse>(`${this.baseUrl}/farms/${id}/weather`);
+  }
+
+  addSensorReading(id: string, payload: { sensor_type: string; value: number; unit: string; notes?: string }) {
+    return this.http.post<SensorReadingMutationResponse>(`${this.baseUrl}/farms/${id}/sensors/readings`, payload);
   }
 
   getFarmActionPlan(id: string) {

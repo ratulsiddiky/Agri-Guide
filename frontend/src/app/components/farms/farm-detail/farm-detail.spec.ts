@@ -50,6 +50,24 @@ describe('FarmDetail', () => {
           provider: 'Open-Meteo',
           data_source: 'open_meteo_current_weather',
         } as never),
+      getActionPlan: () =>
+        of({
+          farm_id: 'farm-1',
+          farm_name: 'North Field',
+          generated_at: '2026-06-01T10:00:00+00:00',
+          priority: 'low',
+          overall_status: 'Low priority: routine monitoring',
+          irrigation_advice: 'Soil moisture is within acceptable range.',
+          crop_health_advice: 'No data',
+          weather_advice: 'Current: Partly cloudy. Temp 18°C.',
+          sensor_advice: '48%',
+          recommended_actions: [],
+          reasons: [],
+          data_sources: ['sensors'],
+          confidence: 'medium',
+        } as never),
+      addSensorReading: () =>
+        of({ message: 'Sensor reading added successfully.', farm_id: 'farm-1', sensor_type: 'soil_moisture', reading: {}, sensor: {} } as never),
       generateDemoSensors: () => of({ count: 5, sensors: [] } as never),
       syncWeather: (id: string) => {
         syncWeatherCalledWith = id;
