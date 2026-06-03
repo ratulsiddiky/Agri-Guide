@@ -171,6 +171,127 @@ def _simulated_crop_prediction(filename, crop_type):
     }
 
 
+def _build_scan_advice(prediction, crop_type=None):
+    label = prediction.get("label", "Healthy Leaf")
+    severity = prediction.get("severity", "low")
+
+    advice_map = {
+        "Healthy Leaf": {
+            "possible_causes": [
+                "Current field conditions appear stable",
+                "No major disease or stress markers detected in the image",
+                "Irrigation and nutrition levels may be in a normal range",
+            ],
+            "immediate_actions": [
+                "Continue routine scouting and keep the current management plan",
+                "Record the image as a healthy baseline for later comparison",
+            ],
+            "prevention_plan": [
+                "Keep checking soil moisture and weather changes each day",
+                "Inspect for new spots, wilting, or pest pressure weekly",
+                "Repeat the scan after major weather swings or crop stress events",
+            ],
+            "monitoring_advice": "Re-scan in 5 to 7 days, or sooner if weather turns hot, wet, or windy.",
+            "when_to_seek_expert_help": "Seek expert help if symptoms spread quickly, several plants decline, or sensor data starts drifting from normal.",
+            "confidence_explanation": "The image matches a low-risk healthy-leaf pattern and does not show strong stress indicators.",
+        },
+        "Early Blight Risk": {
+            "possible_causes": [
+                "Fungal pressure from warm, humid conditions",
+                "Splashing water or wet foliage helping leaf spots spread",
+                "Nearby infected plant material or crop residue",
+            ],
+            "immediate_actions": [
+                "Remove the most affected leaves if practical",
+                "Avoid overhead watering and improve airflow around the canopy",
+                "Check neighboring plants for the same symptoms",
+            ],
+            "prevention_plan": [
+                "Rotate crops between seasons where possible",
+                "Keep foliage dry during watering and prune crowded growth",
+                "Monitor humidity and leaf wetness after rainfall or irrigation",
+            ],
+            "monitoring_advice": "Inspect the crop again within 24 to 48 hours and watch for new dark circular spots.",
+            "when_to_seek_expert_help": "Ask an agronomist or plant pathologist if the spots spread rapidly, reach fruit or stems, or appear on multiple beds.",
+            "confidence_explanation": "The model sees a symptom pattern that commonly aligns with early blight risk, so the recommendation is moderately confident.",
+        },
+        "Powdery Mildew Risk": {
+            "possible_causes": [
+                "High humidity and poor airflow around leaves",
+                "Dense canopy trapping moisture",
+                "Recent weather that favors fungal growth",
+            ],
+            "immediate_actions": [
+                "Increase spacing or prune dense foliage to improve airflow",
+                "Water near the soil line and avoid wetting leaves",
+                "Check nearby plants for white powdery patches",
+            ],
+            "prevention_plan": [
+                "Track humidity-heavy periods and act early",
+                "Keep the crop canopy open and well ventilated",
+                "Re-scan after 48 hours if the white patches grow",
+            ],
+            "monitoring_advice": "Watch the crop daily during humid weather and repeat the scan after the next irrigation cycle.",
+            "when_to_seek_expert_help": "Seek help if the white growth spreads across most leaves, affects fruiting parts, or does not slow after airflow improvements.",
+            "confidence_explanation": "Visual cues are consistent with a humidity-linked fungal pattern, but severity can vary with local weather and crop stage.",
+        },
+        "Nutrient Deficiency Signs": {
+            "possible_causes": [
+                "Soil nutrient levels may be unbalanced",
+                "Soil pH may be limiting nutrient uptake",
+                "Recent fertiliser timing or rate may need review",
+            ],
+            "immediate_actions": [
+                "Review the fertiliser schedule and recent soil amendments",
+                "Check soil pH before applying more nutrients",
+                "Compare older leaves with newer growth for yellowing patterns",
+            ],
+            "prevention_plan": [
+                "Apply balanced nutrients gradually rather than in one large correction",
+                "Keep notes on what was applied and when",
+                "Test soil periodically to catch drift before yield loss appears",
+            ],
+            "monitoring_advice": "Re-check the crop after the next feeding cycle and watch whether the yellowing improves or worsens.",
+            "when_to_seek_expert_help": "Get expert support if symptoms keep spreading, several nutrient types look affected, or the crop stops responding to feeding.",
+            "confidence_explanation": "The leaf pattern matches common deficiency cues, but confirmation usually depends on soil or tissue testing.",
+        },
+        "Water Stress Signs": {
+            "possible_causes": [
+                "Soil moisture is below the crop's preferred range",
+                "Irrigation coverage may be uneven or blocked",
+                "Hot or windy conditions could be increasing water loss",
+            ],
+            "immediate_actions": [
+                "Check soil moisture and irrigate affected zones today",
+                "Inspect emitters, hoses, or valves for blockages",
+                "Mulch exposed soil to reduce evaporation",
+            ],
+            "prevention_plan": [
+                "Track moisture more often during warm or windy weather",
+                "Confirm irrigation coverage across the full bed or block",
+                "Use trend checks to spot dry-down before plants wilt",
+            ],
+            "monitoring_advice": "Monitor moisture again within a few hours after irrigation and re-scan tomorrow if stress remains visible.",
+            "when_to_seek_expert_help": "Seek expert help if irrigation fixes do not improve the crop quickly, or if large areas wilt at the same time.",
+            "confidence_explanation": "The image shows a pattern commonly linked to water stress and the urgency is reinforced by the high-risk label.",
+        },
+    }
+
+    selected = advice_map.get(label, advice_map["Healthy Leaf"])
+    return {
+        "possible_causes": selected["possible_causes"],
+        "immediate_actions": selected["immediate_actions"],
+        "prevention_plan": selected["prevention_plan"],
+        "monitoring_advice": selected["monitoring_advice"],
+        "when_to_seek_expert_help": selected["when_to_seek_expert_help"],
+        "confidence_explanation": selected["confidence_explanation"],
+        "advisory_disclaimer": (
+            "This AI crop scan is advisory support only. Confirm important decisions with field scouting, local conditions, "
+            "and expert agronomy advice when needed."
+        ),
+    }
+
+
 def _scan_response(scan_doc):
     prediction = scan_doc.get("prediction", {})
     created_at = scan_doc.get("created_at") or datetime.now(timezone.utc)
@@ -188,6 +309,13 @@ def _scan_response(scan_doc):
         "severity": prediction.get("severity"),
         "recommendation": scan_doc.get("recommendation"),
         "prevention_steps": prediction.get("prevention_steps", []),
+        "possible_causes": scan_doc.get("possible_causes", []),
+        "immediate_actions": scan_doc.get("immediate_actions", []),
+        "prevention_plan": scan_doc.get("prevention_plan", []),
+        "monitoring_advice": scan_doc.get("monitoring_advice", ""),
+        "when_to_seek_expert_help": scan_doc.get("when_to_seek_expert_help", ""),
+        "confidence_explanation": scan_doc.get("confidence_explanation", ""),
+        "advisory_disclaimer": scan_doc.get("advisory_disclaimer", ""),
         "latency_ms": scan_doc.get("latency_ms"),
         "image_metadata": scan_doc.get("image_metadata", {}),
         "timestamp": timestamp,
@@ -286,6 +414,7 @@ def crop_health_scan(current_user):
 
     metadata = _image_metadata(uploaded_image, image_bytes)
     prediction = _simulated_crop_prediction(metadata["filename"], crop_type)
+    advice = _build_scan_advice(prediction, crop_type)
     created_at = datetime.now(timezone.utc)
     latency_ms = round((perf_counter() - start) * 1000, 2)
     scan_doc = {
@@ -296,6 +425,7 @@ def crop_health_scan(current_user):
         "image_metadata": metadata,
         "prediction": prediction,
         "recommendation": prediction["recommendation"],
+        **advice,
         "model_mode": "simulated_ai",
         "latency_ms": latency_ms,
         "created_at": created_at,

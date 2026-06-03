@@ -151,6 +151,40 @@ def test_user_can_list_only_own_crop_scans(client):
     assert payload["scans"][0]["image_metadata"]["filename"] == "healthy_leaf.png"
 
 
+def test_crop_scan_returns_expanded_advice_and_stores_it(client):
+    token = _login_token(client)
+    farm_id = _create_farm_for("farmer_one", farm_name="Advice Farm")
+
+    response = client.post(
+        "/api/ai/crop-scan",
+        data={
+            "image": (BytesIO(PNG_1X1), "water_stress_leaf.png"),
+            "farm_id": farm_id,
+            "crop_type": "Lettuce",
+        },
+        content_type="multipart/form-data",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["severity"] == "high"
+    assert isinstance(payload["possible_causes"], list) and payload["possible_causes"]
+    assert isinstance(payload["immediate_actions"], list) and payload["immediate_actions"]
+    assert isinstance(payload["prevention_plan"], list) and payload["prevention_plan"]
+    assert isinstance(payload["monitoring_advice"], str) and payload["monitoring_advice"]
+    assert isinstance(payload["when_to_seek_expert_help"], str) and payload["when_to_seek_expert_help"]
+    assert isinstance(payload["confidence_explanation"], str) and payload["confidence_explanation"]
+    assert isinstance(payload["advisory_disclaimer"], str) and payload["advisory_disclaimer"]
+
+    stored_scan = config.get_db().ai_scans.find_one({"_id": ObjectId(payload["scan_id"])})
+    assert stored_scan["possible_causes"] == payload["possible_causes"]
+    assert stored_scan["immediate_actions"] == payload["immediate_actions"]
+    assert stored_scan["prevention_plan"] == payload["prevention_plan"]
+    assert stored_scan["monitoring_advice"] == payload["monitoring_advice"]
+    assert stored_scan["advisory_disclaimer"] == payload["advisory_disclaimer"]
+
+
 def test_farm_scan_access_blocked_for_non_owner(client):
     _login_token(client)
     farm_id = _create_farm_for("farmer_one")

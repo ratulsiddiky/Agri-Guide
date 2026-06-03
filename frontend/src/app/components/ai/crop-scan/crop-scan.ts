@@ -110,6 +110,19 @@ export class CropScan implements OnInit, OnDestroy {
     return `${Math.round((scan.confidence || 0) * 100)}%`;
   }
 
+  advicePreview(items?: string[], fallback = 'Not provided'): string {
+    return items && items.length > 0 ? items[0] : fallback;
+  }
+
+  historySummary(scan: CropScanResponse): string {
+    return (
+      scan.immediate_actions?.[0] ||
+      scan.recommendation ||
+      scan.monitoring_advice ||
+      'Review the full scan advice for next steps.'
+    );
+  }
+
   farmName(farmId?: string | null): string {
     if (!farmId) {
       return 'No farm selected';

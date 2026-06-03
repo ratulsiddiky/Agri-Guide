@@ -98,12 +98,34 @@
           <strong>{{ result.model_mode }}</strong>
         </div>
 
-        <h4>Prevention steps</h4>
+        <h4>Possible causes</h4>
         <ul class="steps-list">
-          @for (step of result.prevention_steps; track step) {
-            <li>{{ step }}</li>
-          }
+          <li *ngFor="let cause of result.possible_causes || []">{{ cause }}</li>
         </ul>
+
+        <h4>Immediate actions</h4>
+        <ul class="steps-list">
+          <li *ngFor="let action of result.immediate_actions || []">{{ action }}</li>
+        </ul>
+
+        <h4>Prevention plan</h4>
+        <ul class="steps-list">
+          <li *ngFor="let step of result.prevention_plan || result.prevention_steps">{{ step }}</li>
+        </ul>
+
+        <h4>Monitoring advice</h4>
+        <p class="advice-copy">{{ result.monitoring_advice || 'Monitor the crop closely and compare the next scan with current results.' }}</p>
+
+        <h4>When to seek expert help</h4>
+        <p class="advice-copy">{{ result.when_to_seek_expert_help || 'Get a second opinion if symptoms spread or the crop gets worse.' }}</p>
+
+        <h4>Confidence explanation</h4>
+        <p class="advice-copy">{{ result.confidence_explanation || 'Confidence reflects the model’s simulated assessment of the image.' }}</p>
+
+        <div class="disclaimer-box">
+          <strong>Advisory disclaimer</strong>
+          <p>{{ result.advisory_disclaimer || 'This advice is informational only and should be confirmed with field checks.' }}</p>
+        </div>
 
         <small class="text-muted">
           Upgrade path: {{ result.future_upgrade_model }}
@@ -133,13 +155,17 @@
         @for (scan of history; track scan.scan_id) {
           <article class="history-item">
             <div>
-              <strong>{{ scan.label }}</strong>
+              <div class="history-heading">
+                <strong>{{ scan.label }}</strong>
+                <span class="severity severity-{{ scan.severity || 'low' }}">{{ scan.severity || 'low' }}</span>
+              </div>
               <span>{{ farmName(scan.farm_id) }} · {{ scan.crop_type || 'Crop not specified' }}</span>
               <small>{{ scan.image_metadata.filename }} · {{ scan.timestamp | date:'short' }}</small>
+              <small class="history-summary">{{ historySummary(scan) }}</small>
             </div>
             <div class="history-score">
               <span>{{ confidencePercent(scan) }}</span>
-              <small>{{ scan.severity }}</small>
+              <small>{{ scan.monitoring_advice || 'Monitoring advice available' }}</small>
             </div>
           </article>
         }

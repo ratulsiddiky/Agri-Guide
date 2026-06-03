@@ -144,6 +144,31 @@
   color: #2d4d44;
 }
 
+.advice-copy {
+  margin: 0 0 1rem;
+  color: #2d4d44;
+  line-height: 1.55;
+}
+
+.disclaimer-box {
+  margin: 0.75rem 0 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #ead9b8;
+  border-radius: 12px;
+  background: #fffaf0;
+}
+
+.disclaimer-box strong {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: #8a5b00;
+}
+
+.disclaimer-box p {
+  margin: 0;
+  color: #6b4d11;
+}
+
 .empty-result {
   min-height: 280px;
   display: grid;
@@ -182,6 +207,19 @@
 
 .history-item strong {
   color: #102a24;
+}
+
+.history-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.2rem;
+}
+
+.history-summary {
+  margin-top: 0.25rem;
+  color: #2d4d44;
 }
 
 .history-score {

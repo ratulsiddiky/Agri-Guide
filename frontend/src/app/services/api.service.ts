@@ -168,6 +168,13 @@ export interface CropScanResponse {
     height?: number | null;
     format?: string | null;
   };
+  possible_causes?: string[];
+  immediate_actions?: string[];
+  prevention_plan?: string[];
+  monitoring_advice?: string;
+  when_to_seek_expert_help?: string;
+  confidence_explanation?: string;
+  advisory_disclaimer?: string;
   timestamp: string;
 }
 
