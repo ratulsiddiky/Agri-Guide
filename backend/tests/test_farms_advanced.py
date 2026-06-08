@@ -682,7 +682,13 @@ def test_action_plan_owner_can_access_and_gets_plan(client, monkeypatch):
         def json(self):
             return {"current": {"temperature_2m": 20, "relative_humidity_2m": 60, "wind_speed_10m": 5, "precipitation": 0.0, "rain": 0.0, "weather_code": 1}}
 
-    monkeypatch.setattr(farms_routes.requests, "get", lambda *args, **kwargs: _FakeWeatherResponse())
+    weather_calls = []
+
+    def _fake_weather_get(*args, **kwargs):
+        weather_calls.append({"args": args, "kwargs": kwargs})
+        return _FakeWeatherResponse()
+
+    monkeypatch.setattr(farms_routes.requests, "get", _fake_weather_get)
 
     response = client.get(
         f"/api/farms/{farm_id}/action-plan",
@@ -694,6 +700,12 @@ def test_action_plan_owner_can_access_and_gets_plan(client, monkeypatch):
     assert payload["farm_id"] == farm_id
     assert payload["priority"] in ("high", "medium", "low")
     assert "irrigation_advice" in payload
+    assert payload["weather_advice"] == "Current: Mainly clear. Temp 20°C."
+    assert "open_meteo_current_weather" in payload["data_sources"]
+    assert weather_calls[0]["kwargs"]["params"]["current"] == (
+        "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,weather_code"
+    )
+    assert weather_calls[0]["kwargs"]["params"]["timezone"] == "auto"
 
 
 def test_action_plan_blocks_other_user(client):
@@ -736,6 +748,9 @@ def test_action_plan_missing_sensors_returns_partial_plan(client, monkeypatch):
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["irrigation_advice"].startswith("Soil moisture data missing")
+    assert payload["weather_advice"] == "Current: Partly cloudy. Temp 21.8°C."
+    assert "None°C" not in payload["weather_advice"]
+    assert "fallback_simulated_weather" in payload["data_sources"]
 
 
 def test_action_plan_ai_scan_influences_recommendation(client, monkeypatch):

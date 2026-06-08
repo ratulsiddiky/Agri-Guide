@@ -160,7 +160,7 @@
                 <span class="severity severity-{{ scan.severity || 'low' }}">{{ scan.severity || 'low' }}</span>
               </div>
               <span>{{ farmName(scan.farm_id) }} · {{ scan.crop_type || 'Crop not specified' }}</span>
-              <small>{{ scan.image_metadata.filename }} · {{ scan.timestamp | date:'short' }}</small>
+              <small>{{ scan.image_metadata?.filename || 'Image' }} · {{ scan.timestamp | date:'short' }}</small>
               <small class="history-summary">{{ historySummary(scan) }}</small>
             </div>
             <div class="history-score">

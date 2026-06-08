@@ -394,6 +394,44 @@ def _open_meteo_weather_payload(farm, latitude, longitude, location_source, weat
     }
 
 
+def _farm_weather_payload(farm, timeout=4):
+    latitude, longitude, location_source = _farm_coordinates(farm)
+    weather_url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "current": ",".join(
+            [
+                "temperature_2m",
+                "relative_humidity_2m",
+                "precipitation",
+                "wind_speed_10m",
+                "weather_code",
+            ]
+        ),
+        "timezone": "auto",
+    }
+
+    try:
+        response = requests.get(weather_url, params=params, timeout=timeout)
+        response.raise_for_status()
+        weather_data = response.json()
+        if not isinstance(weather_data.get("current"), dict):
+            raise ValueError("Open-Meteo response did not include current weather data.")
+        payload = _open_meteo_weather_payload(
+            farm,
+            latitude,
+            longitude,
+            location_source,
+            weather_data,
+        )
+        if payload.get("temperature_c") is None:
+            raise ValueError("Open-Meteo response did not include temperature_2m.")
+        return payload
+    except (requests.RequestException, ValueError):
+        return _fallback_weather_payload(farm, latitude, longitude, location_source)
+
+
 def get_farm_if_authorised(farm_id, current_user):
     """
     Fetch a farm and verify authorization in one database query.
@@ -839,37 +877,7 @@ def get_farm_weather(current_user, farm_id):
     if error_response:
         return error_response
 
-    latitude, longitude, location_source = _farm_coordinates(farm)
-    weather_url = "https://api.open-meteo.com/v1/forecast"
-    params = {
-        "latitude": latitude,
-        "longitude": longitude,
-        "current": ",".join(
-            [
-                "temperature_2m",
-                "relative_humidity_2m",
-                "precipitation",
-                "rain",
-                "weather_code",
-                "wind_speed_10m",
-            ]
-        ),
-        "timezone": "auto",
-    }
-
-    try:
-        response = requests.get(weather_url, params=params, timeout=4)
-        response.raise_for_status()
-        payload = _open_meteo_weather_payload(
-            farm,
-            latitude,
-            longitude,
-            location_source,
-            response.json(),
-        )
-    except requests.RequestException:
-        payload = _fallback_weather_payload(farm, latitude, longitude, location_source)
-
+    payload = _farm_weather_payload(farm)
     return make_response(jsonify(serialize_document(payload)), 200)
 
 
@@ -1043,19 +1051,8 @@ def get_action_plan(current_user, farm_id):
         plan["data_sources"].append(history["data_source"])
 
     # Weather
-    lat, lng, loc_src = _farm_coordinates(farm)
-    try:
-        weather_url = (
-            "https://api.open-meteo.com/v1/forecast"
-            f"?latitude={lat}&longitude={lng}&current_weather=true"
-        )
-        resp = requests.get(weather_url, timeout=3)
-        resp.raise_for_status()
-        weather_payload = _open_meteo_weather_payload(farm, lat, lng, loc_src, resp.json())
-        plan["data_sources"].append("open_meteo_current_weather")
-    except Exception:
-        weather_payload = _fallback_weather_payload(farm, lat, lng, loc_src)
-        plan["data_sources"].append("fallback_simulated_weather")
+    weather_payload = _farm_weather_payload(farm, timeout=3)
+    plan["data_sources"].append(weather_payload["data_source"])
 
     plan["weather_advice"] = (
         f"Current: {weather_payload.get('condition_summary')}. "
