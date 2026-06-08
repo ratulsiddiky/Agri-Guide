@@ -1,4 +1,4 @@
-<div class="container mt-4">
+<div class="container farm-detail-page py-4">
 
   @if (toastMessage) {
     <div class="position-fixed top-0 end-0 p-3 farm-detail-toast">
@@ -11,30 +11,53 @@
   }
 
   @if (loading) {
-    <div class="alert alert-info">⏳ Loading farm details...</div>
+    <div class="card shadow-sm border-0 farm-state-card farm-loading-state" role="status" aria-live="polite">
+      <div class="card-body p-4 p-md-5 text-center">
+        <div class="spinner-border text-success mb-3" role="presentation"></div>
+        <h5 class="mb-2">Loading farm details</h5>
+        <p class="text-muted mb-0">Please wait while we gather weather, sensor, and field insights.</p>
+      </div>
+    </div>
   }
 
   @if (error) {
-    <div class="alert alert-danger">
-      ❌ {{ errorMessage || 'Could not load this farm.' }}
-      <a routerLink="/farms" class="alert-link ms-2">← Back to Farms</a>
+    <div class="alert alert-danger farm-error-state shadow-sm border-0" role="alert">
+      <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+        <div>
+          <div class="fw-semibold mb-1">Could not load this farm</div>
+          <div>❌ {{ errorMessage || 'Could not load this farm.' }}</div>
+        </div>
+        <a routerLink="/farms" class="btn btn-outline-danger btn-sm align-self-start align-self-md-center">Back to Farms</a>
+      </div>
     </div>
   }
 
   @if (farm) {
 
     <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-      <h2 class="text-success mb-0">🚜 {{ farm.farm_name }}</h2>
-      <div class="d-flex gap-2">
+    <div class="farm-header card shadow-sm border-0 mb-4">
+      <div class="card-body p-3 p-md-4">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+          <div>
+            <p class="farm-kicker mb-1">Farm Overview</p>
+            <h2 class="text-success mb-2">🚜 {{ farm.farm_name }}</h2>
+            <div class="d-flex flex-wrap gap-2">
+              <span class="badge text-bg-success-subtle border farm-badge">{{ farm.crop_type || 'Crop not set' }}</span>
+              <span class="badge text-bg-light border farm-badge">Sensors: {{ farm.sensors?.length || 0 }}</span>
+              <span class="badge text-bg-light border farm-badge">Weather Logs: {{ farm.weather_logs?.length || 0 }}</span>
+            </div>
+          </div>
+          <div class="farm-action-group d-flex flex-wrap gap-2">
         <a
           routerLink="/ai/crop-scan"
           [queryParams]="{ farm_id: farm._id, crop_type: farm.crop_type || '' }"
-          class="btn btn-success btn-sm">
+              class="btn btn-success btn-sm">
           AI Crop Scan
         </a>
-        <a [routerLink]="['/farms', farm._id, 'edit']" class="btn btn-outline-primary btn-sm">Edit Farm</a>
-        <a routerLink="/farms" class="btn btn-outline-secondary btn-sm">← Back to All Farms</a>
+            <a [routerLink]="['/farms', farm._id, 'edit']" class="btn btn-outline-primary btn-sm">Edit Farm</a>
+            <a routerLink="/farms" class="btn btn-outline-secondary btn-sm">Back to All Farms</a>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -42,7 +65,7 @@
 
       <!-- Farm Info -->
       <div class="col-md-6">
-        <div class="card shadow-sm border-success h-100">
+        <div class="card shadow-sm border-success h-100 farm-panel">
           <div class="card-header bg-success text-white">📋 Farm Info</div>
           <div class="card-body">
             <ul class="list-group list-group-flush">
@@ -71,18 +94,21 @@
 
       <!-- Alert History -->
       <div class="col-md-6">
-        <div class="card shadow-sm border-warning h-100">
+        <div class="card shadow-sm border-warning h-100 farm-panel">
           <div class="card-header bg-warning text-dark">⚠️ Alert History</div>
           <div class="card-body">
             @if (farm.alerts_history && farm.alerts_history.length > 0) {
-              <ul class="list-group list-group-flush">
+              <ul class="list-group list-group-flush alert-list">
                 <li class="list-group-item d-flex justify-content-between align-items-center px-0" *ngFor="let alert of farm.alerts_history">
-                  <span class="badge bg-danger">{{ alert.alert_type }}</span>
+                  <span class="badge bg-danger rounded-pill">{{ alert.alert_type }}</span>
                   <small class="text-muted">{{ alert.timestamp | date:'short' }}</small>
                 </li>
               </ul>
             } @else {
-              <p class="text-success mb-0">✅ No active alerts — all clear!</p>
+              <div class="farm-empty-state compact text-success mb-0">
+                <div class="empty-icon">✅</div>
+                <p class="mb-0">No active alerts. Field conditions are stable.</p>
+              </div>
             }
           </div>
         </div>
@@ -90,9 +116,9 @@
 
       <!-- Weather Insights -->
       <div class="col-md-6">
-        <div class="card shadow-sm border-info h-100">
+        <div class="card shadow-sm border-info h-100 farm-panel">
           <div class="card-header bg-info text-white">🌤️ Weather Insights</div>
-          <div class="card-body">
+          <div class="card-body weather-insights-card-body">
             @if (insights) {
               <ul class="list-group list-group-flush mb-3">
                 <li class="list-group-item">
@@ -103,9 +129,12 @@
                 </li>
               </ul>
             } @else {
-              <p class="text-muted mb-3">
+              <div class="farm-empty-state compact mb-3">
+                <div class="empty-icon">🌥️</div>
+                <p class="text-muted mb-0">
                 No weather data yet. Click below to sync live weather for this farm.
-              </p>
+                </p>
+              </div>
             }
 
             @if (syncMessage) {
@@ -130,11 +159,11 @@
 
       <!-- Live Weather -->
       <div class="col-md-6">
-        <div class="card shadow-sm border-info h-100 live-weather-card">
+        <div class="card shadow-sm border-info h-100 live-weather-card farm-panel">
           <div class="card-header bg-info text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span>🌦️ Live Weather</span>
             @if (farmWeather) {
-              <span class="badge bg-light text-info">{{ farmWeather.provider }}</span>
+              <span class="badge bg-light text-info rounded-pill px-3">{{ farmWeather.provider }}</span>
             }
           </div>
           <div class="card-body">
@@ -182,7 +211,10 @@
                 Updated: {{ farmWeather.timestamp | date:'short' }}
               </small>
             } @else {
-              <p class="text-muted mb-0">Live weather is not available for this farm yet.</p>
+              <div class="farm-empty-state compact mb-0">
+                <div class="empty-icon">🛰️</div>
+                <p class="text-muted mb-0">Live weather is not available for this farm yet.</p>
+              </div>
             }
           </div>
         </div>
@@ -190,7 +222,7 @@
 
       <!-- Irrigation -->
       <div class="col-md-6">
-        <div class="card shadow-sm border-primary h-100" [appHighlightStatus]="irrigation?.status || 'OK'">
+        <div class="card shadow-sm border-primary h-100 farm-panel" [appHighlightStatus]="irrigation?.status || 'OK'">
           <div class="card-header bg-primary text-white">💧 Irrigation Status</div>
           <div class="card-body">
             <div *ngIf="irrigation?.status === 'WARNING'" class="alert alert-warning" role="alert">
@@ -200,7 +232,7 @@
             @if (irrigation) {
               <p class="mb-2">
                 <strong>Status:</strong>
-                <span class="badge ms-2"
+                <span class="badge ms-2 rounded-pill px-3"
                   [appHighlightStatus]="irrigation.status"
                   [class.bg-danger]="irrigation.status === 'WARNING'"
                   [class.bg-success]="irrigation.status === 'OK'">
@@ -211,10 +243,13 @@
                 <strong>Soil Moisture:</strong> {{ irrigation.moisture }}%
               </p>
             } @else {
-              <p class="text-muted mb-0">
+              <div class="farm-empty-state compact mb-0">
+                <div class="empty-icon">💧</div>
+                <p class="text-muted mb-0">
                 No soil moisture sensor found. Add a sensor of type
                 <code>Soil Moisture</code> below.
-              </p>
+                </p>
+              </div>
             }
           </div>
         </div>
@@ -222,19 +257,25 @@
 
       <!-- Action Plan -->
       <div class="col-md-6">
-        <div class="card shadow-sm border-success h-100">
+        <div class="card shadow-sm border-success h-100 farm-panel">
           <div class="card-header bg-success text-white">🗂️ Action Plan</div>
           <div class="card-body">
             @if (actionPlanLoading) {
-              <div class="text-center text-muted">Loading action plan…</div>
+              <div class="d-flex align-items-center gap-2 text-muted">
+                <span class="spinner-border spinner-border-sm text-success" role="presentation"></span>
+                <span>Loading action plan...</span>
+              </div>
             } @else if (!actionPlan) {
-              <div class="text-muted">No action plan is available for this farm right now.</div>
+              <div class="farm-empty-state compact">
+                <div class="empty-icon">🗂️</div>
+                <p class="text-muted mb-0">No action plan is available for this farm right now.</p>
+              </div>
             } @else {
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <h6 class="mb-0">Priority</h6>
-                <span class="badge bg-danger" *ngIf="actionPlan.priority === 'high'">HIGH</span>
-                <span class="badge bg-warning text-dark" *ngIf="actionPlan.priority === 'medium'">MEDIUM</span>
-                <span class="badge bg-secondary" *ngIf="actionPlan.priority === 'low'">LOW</span>
+                <span class="badge bg-danger rounded-pill px-3" *ngIf="actionPlan.priority === 'high'">HIGH</span>
+                <span class="badge bg-warning text-dark rounded-pill px-3" *ngIf="actionPlan.priority === 'medium'">MEDIUM</span>
+                <span class="badge bg-secondary rounded-pill px-3" *ngIf="actionPlan.priority === 'low'">LOW</span>
               </div>
               <p class="small mb-2"><strong>Status:</strong> {{ actionPlan.overall_status }}</p>
               <p class="small mb-2"><strong>Irrigation:</strong> {{ actionPlan.irrigation_advice }}</p>
@@ -264,10 +305,10 @@
 
       <!-- Sensors -->
       <div class="col-12">
-        <div class="card shadow-sm">
-          <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+        <div class="card shadow-sm farm-panel">
+          <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span>📡 Sensors ({{ farm.sensors?.length || 0 }})</span>
-            <div class="d-flex gap-2">
+            <div class="d-flex flex-wrap gap-2">
               <button class="btn btn-outline-light btn-sm"
                 (click)="generateDemoSensors()"
                 [disabled]="generatingDemoSensors">
@@ -285,7 +326,7 @@
 
           <div class="card-body">
 
-            <div class="mb-4 p-3 bg-light rounded border">
+            <div class="mb-4 p-3 sensor-form-shell rounded border">
               <h6 class="text-secondary mb-3">Add Sensor Reading</h6>
               <div class="row g-2 align-items-end">
                 <div class="col-md-3">
@@ -357,7 +398,7 @@
             </div>
 
             @if (showSensorForm) {
-              <div class="row g-2 mb-4 p-3 bg-light rounded">
+              <div class="row g-2 mb-4 p-3 sensor-form-shell rounded">
                 <h6 class="text-secondary mb-2">New Sensor</h6>
                 <div class="col-md-4">
                   <input type="text" class="form-control form-control-sm"
@@ -376,7 +417,11 @@
                 </div>
                 @if (sensorMessage) {
                   <div class="col-12">
-                    <small class="text-muted">{{ sensorMessage }}</small>
+                    <div class="alert py-2 small mb-0"
+                      [class.alert-success]="sensorMessage.startsWith('Sensor added')"
+                      [class.alert-danger]="!sensorMessage.startsWith('Sensor added')">
+                      {{ sensorMessage }}
+                    </div>
                   </div>
                 }
               </div>
@@ -386,11 +431,11 @@
               <div class="row g-3">
                 @for (sensor of farm.sensors; track sensor.sensor_id) {
                   <div class="col-md-4">
-                    <div class="card border-secondary h-100">
+                    <div class="card border-secondary h-100 sensor-card">
                       <div class="card-body py-2">
                         <h6 class="mb-1">{{ sensor.type }}</h6>
                         <small class="text-muted d-block">ID: {{ sensor.sensor_id }}</small>
-                        <span class="badge mt-1"
+                        <span class="badge mt-1 rounded-pill"
                           [class.bg-success]="sensor.status"
                           [class.bg-secondary]="!sensor.status">
                           {{ sensor.status ? 'Active' : 'Inactive' }}
@@ -411,15 +456,19 @@
               </div>
             } @else {
               @if (!showSensorForm) {
-                <p class="text-muted mb-2">No sensors found for this farm yet.</p>
-                <button class="btn btn-success btn-sm"
-                  (click)="generateDemoSensors()"
-                  [disabled]="generatingDemoSensors">
-                  @if (generatingDemoSensors) {
-                    <span class="spinner-border spinner-border-sm me-1"></span>
-                  }
-                  Generate demo sensors
-                </button>
+                <div class="farm-empty-state text-center">
+                  <div class="empty-icon">📡</div>
+                  <h6 class="mb-2">No sensors connected yet</h6>
+                  <p class="text-muted mb-3">Add a sensor manually or generate demo sensors to start monitoring your farm.</p>
+                  <button class="btn btn-success btn-sm"
+                    (click)="generateDemoSensors()"
+                    [disabled]="generatingDemoSensors">
+                    @if (generatingDemoSensors) {
+                      <span class="spinner-border spinner-border-sm me-1"></span>
+                    }
+                    Generate demo sensors
+                  </button>
+                </div>
               }
             }
 
@@ -429,11 +478,11 @@
 
       <!-- Sensor Trends -->
       <div class="col-12">
-        <div class="card shadow-sm sensor-trends-card">
+        <div class="card shadow-sm sensor-trends-card farm-panel">
           <div class="card-header bg-success text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span>📈 Sensor Trends</span>
             @if (sensorHistory) {
-              <span class="badge bg-light text-success">
+              <span class="badge bg-light text-success rounded-pill px-3">
                 {{ sensorHistory.data_source === 'stored_sensor_readings' ? 'Stored readings' : 'Simulated trend' }}
               </span>
             }
@@ -471,7 +520,10 @@
                 </div>
               </div>
             } @else {
-              <p class="text-muted mb-0">Sensor trend data is not available yet.</p>
+              <div class="farm-empty-state compact mb-0">
+                <div class="empty-icon">📉</div>
+                <p class="text-muted mb-0">Sensor trend data is not available yet.</p>
+              </div>
             }
           </div>
         </div>
