@@ -1,0 +1,87 @@
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2 class="text-success mb-0">User Profile</h2>
+    <a routerLink="/home" class="btn btn-outline-secondary btn-sm">Back to Dashboard</a>
+  </div>
+
+  @if (loading) {
+    <div class="alert alert-info">Loading profile details...</div>
+  }
+
+  @if (errorMessage) {
+    <div class="alert alert-danger" role="alert">{{ errorMessage }}</div>
+  }
+
+  @if (successMessage) {
+    <div class="alert alert-success" role="status">{{ successMessage }}</div>
+  }
+
+  @if (!loading) {
+    <div class="card shadow-sm border-success profile-card">
+      <div class="card-body p-4">
+        <form [formGroup]="profileForm" (ngSubmit)="saveProfile()" novalidate>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="username" class="form-label fw-semibold">Username</label>
+              <input id="username" type="text" class="form-control" formControlName="username" />
+              <div class="form-text">Username is managed by your account login.</div>
+            </div>
+
+            <div class="col-md-6">
+              <label for="role" class="form-label fw-semibold">Role</label>
+              <input id="role" type="text" class="form-control text-capitalize" formControlName="role" />
+              <div class="form-text">Role changes are handled by an administrator.</div>
+            </div>
+
+            <div class="col-md-6">
+              <label for="email" class="form-label fw-semibold">Email</label>
+              <input id="email" type="email" class="form-control" formControlName="email" />
+              @if (profileForm.controls.email.touched && profileForm.controls.email.invalid) {
+                <div class="text-danger small mt-1">Enter a valid email address.</div>
+              }
+            </div>
+
+            <div class="col-md-6">
+              <label for="contact_preference" class="form-label fw-semibold">Contact Preference</label>
+              <select id="contact_preference" class="form-select" formControlName="contact_preference">
+                @for (preference of contactPreferences; track preference.value) {
+                  <option [value]="preference.value">{{ preference.label }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="col-md-6">
+              <label for="display_name" class="form-label fw-semibold">Display Name</label>
+              <input
+                id="display_name"
+                type="text"
+                class="form-control"
+                formControlName="display_name"
+                maxlength="80"
+              />
+            </div>
+
+            <div class="col-md-6">
+              <label for="phone" class="form-label fw-semibold">Phone</label>
+              <input id="phone" type="tel" class="form-control" formControlName="phone" maxlength="32" />
+            </div>
+          </div>
+
+          <div class="mt-4 d-flex gap-2 flex-wrap">
+            <button type="submit" class="btn btn-success" [disabled]="saving">
+              @if (saving) {
+                <span class="spinner-border spinner-border-sm me-1"></span>
+                Saving...
+              } @else {
+                Save Profile
+              }
+            </button>
+            <button type="button" class="btn btn-outline-secondary" [disabled]="saving" (click)="loadProfile()">
+              Reset
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+</div>

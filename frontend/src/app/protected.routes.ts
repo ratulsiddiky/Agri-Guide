@@ -38,6 +38,11 @@ export const protectedRoutes: Routes = [
           ),
       },
       {
+        path: 'profile',
+        loadComponent: () =>
+          import('./components/profile/profile').then((m) => m.Profile),
+      },
+      {
         path: 'farms/new',
         loadComponent: () =>
           import('./components/farms/farm-form/farm-form').then(

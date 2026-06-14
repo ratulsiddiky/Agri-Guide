@@ -9,7 +9,7 @@ from flask import Blueprint, jsonify, make_response, request
 from flask_cors import cross_origin  
 from pymongo.errors import PyMongoError
 
-from blueprints.auth.models import validate_signup_payload
+from blueprints.auth.models import validate_profile_update_payload, validate_signup_payload
 import config
 from decorators import jwt_required
 from extensions import limiter
@@ -17,6 +17,19 @@ from utils.emailer import send_verification_email
 from utils.validators import serialize_document
 
 auth_bp = Blueprint("auth_bp", __name__)
+
+
+def _safe_user_profile(user):
+    return {
+        "user_id": str(user.get("_id", "")),
+        "username": user.get("username"),
+        "email": user.get("email"),
+        "role": user.get("role"),
+        "contact_preference": user.get("contact_preference"),
+        "created_at": serialize_document(user.get("created_at")),
+        "display_name": user.get("display_name", ""),
+        "phone": user.get("phone", ""),
+    }
 
 
 @auth_bp.route("/api/users/signup", methods=["POST"])
@@ -180,11 +193,39 @@ def logout(current_user):
 @auth_bp.route("/api/users/me", methods=["GET"])
 @jwt_required
 def get_current_user(current_user):
-    user_doc = serialize_document(current_user)
-    user_doc.pop("password", None)
-    user_doc.pop("verification_token", None)
-    user_doc.pop("verification_token_expires_at", None)
-    return make_response(jsonify(user_doc), 200)
+    return make_response(jsonify(_safe_user_profile(current_user)), 200)
+
+
+@auth_bp.route("/api/users/me", methods=["PUT"])
+@jwt_required
+def update_current_user(current_user):
+    updates, error = validate_profile_update_payload(request.get_json(silent=True))
+    if error:
+        return make_response(jsonify({"message": error}), 400)
+
+    users = config.get_db().users
+
+    if "email" in updates:
+        existing_user = users.find_one(
+            {"email": updates["email"], "_id": {"$ne": current_user["_id"]}}
+        )
+        if existing_user:
+            return make_response(
+                jsonify({"message": "Email is already registered."}),
+                409,
+            )
+
+    if updates:
+        try:
+            result = users.update_one({"_id": current_user["_id"]}, {"$set": updates})
+        except PyMongoError as exc:
+            return make_response(jsonify({"message": "Database error", "error": str(exc)}), 500)
+
+        if result.matched_count == 0:
+            return make_response(jsonify({"message": "User not found"}), 404)
+
+    updated_user = users.find_one({"_id": current_user["_id"]})
+    return make_response(jsonify(_safe_user_profile(updated_user)), 200)
 
 
 @auth_bp.route("/api/users", methods=["GET"])

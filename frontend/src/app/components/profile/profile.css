@@ -1,0 +1,8 @@
+.profile-card {
+  border-radius: 0.5rem;
+}
+
+.profile-card .form-control:disabled {
+  background-color: #f8f9fa;
+  color: #495057;
+}

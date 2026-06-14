@@ -24,6 +24,24 @@ export interface RegisterResponse {
   verification_link?: string;
 }
 
+export interface UserProfile {
+  user_id: string;
+  username: string;
+  email: string;
+  role: string;
+  contact_preference?: string;
+  created_at?: string;
+  display_name?: string;
+  phone?: string;
+}
+
+export interface UpdateProfileRequest {
+  email: string;
+  contact_preference: string;
+  display_name?: string;
+  phone?: string;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -67,6 +85,14 @@ export class AuthService {
 
   verifyEmail(verificationLink: string): Observable<{ message: string }> {
     return this.http.get<{ message: string }>(verificationLink);
+  }
+
+  getProfile(): Observable<UserProfile> {
+    return this.http.get<UserProfile>(`${this.baseUrl}/users/me`);
+  }
+
+  updateProfile(payload: UpdateProfileRequest): Observable<UserProfile> {
+    return this.http.put<UserProfile>(`${this.baseUrl}/users/me`, payload);
   }
 
   logout() {

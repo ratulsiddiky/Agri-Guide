@@ -1,4 +1,5 @@
 from base64 import b64encode
+from datetime import datetime, timezone
 
 import bcrypt
 import mongomock
@@ -28,17 +29,27 @@ def _basic_auth(username, password):
     return {"Authorization": f"Basic {token}"}
 
 
-def _insert_verified_user(username="farmer_one", password_text="Password123!"):
+def _insert_verified_user(username="farmer_one", password_text="Password123!", role="user"):
     password = bcrypt.hashpw(password_text.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     config.get_db().users.insert_one(
         {
             "username": username,
             "email": f"{username}@example.com",
             "password": password,
-            "role": "user",
+            "role": role,
+            "contact_preference": "email",
             "is_verified": True,
+            "verification_token": "secret-token",
+            "verification_token_expires_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(timezone.utc),
         }
     )
+
+
+def _login_token(client, username="farmer_one", password="Password123!", role="user"):
+    _insert_verified_user(username=username, password_text=password, role=role)
+    response = client.post("/api/login", headers=_basic_auth(username, password))
+    return response.get_json()["token"]
 
 
 def test_signup_creates_user(client):
@@ -168,3 +179,91 @@ def test_logout_blacklists_token(client):
 
     assert logout_response.status_code == 200
     assert config.get_db().blacklist.find_one({"token": token}) is not None
+
+
+def test_get_current_user_profile_returns_safe_fields(client):
+    token = _login_token(client)
+
+    response = client.get("/api/users/me", headers={"Authorization": f"Bearer {token}"})
+
+    body = response.get_json()
+    assert response.status_code == 200
+    assert body["user_id"]
+    assert body["username"] == "farmer_one"
+    assert body["email"] == "farmer_one@example.com"
+    assert body["role"] == "user"
+    assert body["contact_preference"] == "email"
+    assert "created_at" in body
+    assert "password" not in body
+    assert "verification_token" not in body
+    assert "verification_token_expires_at" not in body
+
+
+def test_update_current_user_profile_allows_safe_fields(client):
+    token = _login_token(client)
+
+    response = client.put(
+        "/api/users/me",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "email": " Updated.Farmer@Example.com ",
+            "contact_preference": "sms",
+            "display_name": " Farmer One ",
+            "phone": " 07123 456789 ",
+        },
+    )
+
+    body = response.get_json()
+    stored_user = config.get_db().users.find_one({"username": "farmer_one"})
+    assert response.status_code == 200
+    assert body["email"] == "updated.farmer@example.com"
+    assert body["contact_preference"] == "sms"
+    assert body["display_name"] == "Farmer One"
+    assert body["phone"] == "07123 456789"
+    assert stored_user["email"] == "updated.farmer@example.com"
+    assert stored_user["display_name"] == "Farmer One"
+
+
+def test_update_current_user_profile_does_not_change_role_or_username(client):
+    token = _login_token(client)
+
+    response = client.put(
+        "/api/users/me",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "username": "renamed_user",
+            "role": "admin",
+            "email": "farmer_one_updated@example.com",
+        },
+    )
+
+    body = response.get_json()
+    stored_user = config.get_db().users.find_one({"username": "farmer_one"})
+    assert response.status_code == 200
+    assert body["username"] == "farmer_one"
+    assert body["role"] == "user"
+    assert stored_user["username"] == "farmer_one"
+    assert stored_user["role"] == "user"
+    assert config.get_db().users.find_one({"username": "renamed_user"}) is None
+
+
+@pytest.mark.parametrize("method", ["get", "put"])
+def test_current_user_profile_requires_authentication(client, method):
+    request_method = getattr(client, method)
+
+    response = request_method("/api/users/me", json={})
+
+    assert response.status_code == 401
+
+
+def test_update_current_user_profile_rejects_invalid_email(client):
+    token = _login_token(client)
+
+    response = client.put(
+        "/api/users/me",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"email": "not-an-email"},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["message"] == "A valid email address is required."
