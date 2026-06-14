@@ -6,11 +6,11 @@
 }
 
 .farm-detail-page {
-  background: linear-gradient(180deg, #f4fbf5 0%, #ffffff 52%);
+  background: transparent;
 }
 
 .farm-header {
-  background: linear-gradient(130deg, #f3fbf4 0%, #ffffff 58%);
+  background: linear-gradient(130deg, rgba(216, 248, 221, 0.82) 0%, rgba(255, 255, 255, 0.96) 62%);
 }
 
 .farm-kicker {
@@ -30,11 +30,13 @@
 .farm-panel {
   border-radius: 14px;
   overflow: hidden;
+  border-color: rgba(40, 122, 100, 0.14) !important;
 }
 
 .farm-panel .card-header {
   font-weight: 700;
   letter-spacing: 0.01em;
+  border-bottom-color: rgba(40, 122, 100, 0.14);
 }
 
 .farm-panel .card-body {

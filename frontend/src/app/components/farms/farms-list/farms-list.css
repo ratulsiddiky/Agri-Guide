@@ -8,9 +8,9 @@
 .skeleton {
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.1) 25%,
-    rgba(255, 255, 255, 0.2) 50%,
-    rgba(255, 255, 255, 0.1) 75%
+    rgba(22, 101, 52, 0.05) 25%,
+    rgba(22, 101, 52, 0.12) 50%,
+    rgba(22, 101, 52, 0.05) 75%
   );
   background-size: 200% 100%;
   animation: loading 1.5s infinite;
@@ -33,6 +33,7 @@
 .farm-map-card {
   display: block;
   overflow: hidden;
+  border-color: rgba(40, 122, 100, 0.14);
 }
 
 .farm-map-card:hover {
@@ -78,6 +79,15 @@
 .map-message {
   color: #5f6f68;
   font-size: 0.88rem;
+}
+
+.card-title {
+  color: #12332b;
+  font-weight: 800;
+}
+
+.card-footer {
+  background: rgba(255, 255, 255, 0.88) !important;
 }
 
 :host ::ng-deep .farm-map-popup {

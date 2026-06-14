@@ -6,10 +6,14 @@
 
 .feature-card {
 	transition: transform 0.2s ease, box-shadow 0.2s ease;
-	border-radius: 0.9rem;
+	border-color: rgba(40, 122, 100, 0.14) !important;
+	border-radius: 1rem;
 }
 
 .feature-card:hover {
-	transform: translateY(-4px);
-	box-shadow: 0 0.85rem 1.25rem rgba(15, 23, 42, 0.08) !important;
+	box-shadow: 0 0.85rem 1.25rem rgba(28, 81, 70, 0.1) !important;
+}
+
+:host ::ng-deep .card-header {
+	font-weight: 800;
 }

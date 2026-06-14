@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  padding: 1.5rem;
+  padding: 1.25rem 0 1.5rem;
   color: #14241f;
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -18,7 +18,7 @@
   background:
     radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.72), transparent 30%),
     linear-gradient(135deg, #d8f8dd 0%, #bfeee9 46%, #d8ebff 100%);
-  box-shadow: 0 22px 60px rgba(26, 97, 86, 0.16);
+  box-shadow: 0 22px 60px rgba(26, 97, 86, 0.14);
   overflow: hidden;
 }
 
@@ -113,7 +113,7 @@
   border: 1px solid rgba(40, 122, 100, 0.12);
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 16px 42px rgba(28, 81, 70, 0.1);
+  box-shadow: 0 16px 42px rgba(28, 81, 70, 0.09);
 }
 
 .kpi-card {
@@ -331,7 +331,7 @@ tbody tr:last-child td {
 
 @media (max-width: 760px) {
   .smart-dashboard {
-    padding: 1rem;
+    padding: 1rem 0;
   }
 
   .welcome-hero {

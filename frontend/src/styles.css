@@ -1,9 +1,8 @@
 body {
   background:
-    linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)),
-    url('/assets/images/daisy-field.jpg') no-repeat center center fixed;
-  background-size: cover;
-  background-position: center;
+    radial-gradient(circle at top left, rgba(191, 238, 233, 0.45), transparent 32rem),
+    radial-gradient(circle at top right, rgba(216, 235, 255, 0.5), transparent 34rem),
+    linear-gradient(180deg, #f4fbf6 0%, #eef8f4 48%, #f8fbff 100%);
   background-attachment: fixed;
   min-height: 100vh;
   margin: 0;
@@ -12,17 +11,23 @@ body {
 }
 
 .card {
-  background: rgba(255, 255, 255, 0.8);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.94);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(40, 122, 100, 0.12);
   border-radius: 16px;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: 0 14px 36px rgba(28, 81, 70, 0.08);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+  border-color: rgba(22, 163, 74, 0.22);
+  box-shadow: 0 18px 42px rgba(28, 81, 70, 0.12);
+}
+
+.card-header {
+  border-color: rgba(40, 122, 100, 0.12);
+  font-weight: 700;
 }
 
 .btn-success {
@@ -55,4 +60,16 @@ body {
 
 .btn-outline-secondary {
   border-radius: 50px;
+}
+
+.form-control,
+.form-select {
+  border-color: rgba(40, 122, 100, 0.18);
+  border-radius: 0.75rem;
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: #16a34a;
+  box-shadow: 0 0 0 0.2rem rgba(22, 163, 74, 0.16);
 }
