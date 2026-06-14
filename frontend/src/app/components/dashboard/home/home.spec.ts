@@ -13,7 +13,12 @@ describe('Home', () => {
 
   beforeEach(async () => {
     const authServiceStub = {
-      currentUserSignal: () => ({ username: 'farmer-1', role: 'user', token: 'x' }),
+      currentUserSignal: () => ({
+        username: 'farmer-1',
+        display_name: 'Farmer One',
+        role: 'user',
+        token: 'x',
+      }),
     } as unknown as AuthService;
 
     const apiServiceStub = {
@@ -53,5 +58,9 @@ describe('Home', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('should prefer display name in the greeting', () => {
+    expect(component.greetingName).toBe('Farmer One');
   });
 });

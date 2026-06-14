@@ -108,7 +108,7 @@ export class Home implements OnInit, OnDestroy {
 
   get greetingName(): string {
     const user = this.authService.currentUserSignal();
-    return user?.username || 'Farmer';
+    return user?.display_name || user?.username || 'Farmer';
   }
 
   get dashboardKpiCards() {

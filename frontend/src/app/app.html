@@ -27,7 +27,7 @@
           <a class="nav-link" routerLink="/login">Login</a>
         }
         @if (auth.isLoggedIn()) {
-          <a class="nav-link text-warning fw-semibold" routerLink="/profile">User {{ auth.getUsername() }}</a>
+          <a class="nav-link text-warning fw-semibold" routerLink="/profile">User {{ auth.getDisplayName() }}</a>
           <button class="btn btn-outline-light btn-sm ms-lg-2" (click)="logout()">Logout</button>
         }
       </div>

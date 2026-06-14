@@ -10,6 +10,7 @@ describe('Profile', () => {
   let fixture: ComponentFixture<Profile>;
   let profileResponse: UserProfile;
   let updatePayload: UpdateProfileRequest | null;
+  let applyProfileCalls: UserProfile[];
 
   beforeEach(async () => {
     profileResponse = {
@@ -22,6 +23,7 @@ describe('Profile', () => {
       phone: '07123 456789',
     };
     updatePayload = null;
+    applyProfileCalls = [];
 
     await TestBed.configureTestingModule({
       imports: [Profile],
@@ -34,6 +36,9 @@ describe('Profile', () => {
             updateProfile: (payload: UpdateProfileRequest) => {
               updatePayload = payload;
               return of({ ...profileResponse, ...payload });
+            },
+            applyProfile: (profile: UserProfile) => {
+              applyProfileCalls.push(profile);
             },
           },
         },
@@ -52,6 +57,7 @@ describe('Profile', () => {
     expect(component.profileForm.controls.role.value).toBe('user');
     expect(component.profileForm.controls.email.value).toBe('farmer@example.com');
     expect(component.profileForm.controls.display_name.value).toBe('Farmer One');
+    expect(applyProfileCalls[0].display_name).toBe('Farmer One');
   });
 
   it('should save only editable profile fields', () => {
@@ -73,6 +79,7 @@ describe('Profile', () => {
       phone: '07000 000000',
     });
     expect(component.successMessage).toBe('Profile updated successfully.');
+    expect(applyProfileCalls.at(-1)?.display_name).toBe('Updated Farmer');
   });
 
   it('should show an error message when saving fails', async () => {

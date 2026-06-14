@@ -68,6 +68,7 @@ export class Profile implements OnInit, OnDestroy {
       .subscribe({
         next: (profile) => {
           this.patchProfile(profile);
+          this.authService.applyProfile(profile);
           this.loading = false;
           this.profileForm.enable();
           this.profileForm.controls.username.disable();
@@ -111,6 +112,7 @@ export class Profile implements OnInit, OnDestroy {
       .subscribe({
         next: (profile) => {
           this.patchProfile(profile);
+          this.authService.applyProfile(profile);
           this.successMessage = 'Profile updated successfully.';
           this.saving = false;
           this.profileForm.enable();

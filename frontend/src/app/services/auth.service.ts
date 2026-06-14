@@ -2,7 +2,7 @@ import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, of } from 'rxjs';
-import { catchError, finalize, tap } from 'rxjs/operators';
+import { catchError, finalize, map, switchMap, tap } from 'rxjs/operators';
 import { User } from '../models/user.model';
 import { environment } from '../../environments/environment';
 
@@ -11,6 +11,7 @@ export interface AuthResponse {
   username: string;
   role?: string;
   user_id?: string;
+  display_name?: string;
 }
 
 export interface RegisterRequest {
@@ -71,7 +72,16 @@ export class AuthService {
 
     return this.http
       .post<AuthResponse>(`${this.baseUrl}/login`, {}, { headers })
-      .pipe(tap((response) => this.setSession(response)));
+      .pipe(
+        tap((response) => this.setSession(response)),
+        switchMap((response) =>
+          this.getProfile().pipe(
+            tap((profile) => this.applyProfile(profile)),
+            map(() => response),
+            catchError(() => of(response))
+          )
+        )
+      );
   }
 
   register(payload: RegisterRequest): Observable<RegisterResponse> {
@@ -124,6 +134,11 @@ export class AuthService {
     return this.currentUserSignal()?.username || '';
   }
 
+  getDisplayName(): string {
+    const user = this.currentUserSignal();
+    return user?.display_name || user?.username || '';
+  }
+
   getRole(): string {
     return this.currentUserSignal()?.role || '';
   }
@@ -148,12 +163,44 @@ export class AuthService {
       localStorage.removeItem('user_id');
     }
 
+    this.clearProfileStorage();
+    this.setOptionalStorageValue('display_name', data.display_name);
+
     this.currentUserSignal.set({
       _id: data.user_id,
       username: data.username,
       role: data.role,
+      display_name: data.display_name,
       token: data.token,
     });
+  }
+
+  applyProfile(profile: UserProfile): void {
+    const currentUser = this.currentUserSignal();
+
+    if (!currentUser) {
+      return;
+    }
+
+    const nextUser: User = {
+      ...currentUser,
+      _id: currentUser._id || profile.user_id,
+      user_id: currentUser.user_id || profile.user_id,
+      username: currentUser.username || profile.username,
+      role: currentUser.role || profile.role,
+      email: profile.email,
+      contact_preference: profile.contact_preference,
+      created_at: profile.created_at,
+      display_name: profile.display_name?.trim() || '',
+      phone: profile.phone,
+    };
+
+    this.setOptionalStorageValue('display_name', nextUser.display_name);
+    this.setOptionalStorageValue('email', nextUser.email);
+    this.setOptionalStorageValue('contact_preference', nextUser.contact_preference);
+    this.setOptionalStorageValue('created_at', nextUser.created_at);
+    this.setOptionalStorageValue('phone', nextUser.phone);
+    this.currentUserSignal.set(nextUser);
   }
 
   clearSession() {
@@ -161,6 +208,7 @@ export class AuthService {
     localStorage.removeItem('username');
     localStorage.removeItem('role');
     localStorage.removeItem('user_id');
+    this.clearProfileStorage();
     this.currentUserSignal.set(null);
   }
 
@@ -179,9 +227,33 @@ export class AuthService {
 
     return {
       _id: localStorage.getItem('user_id') || undefined,
+      user_id: localStorage.getItem('user_id') || undefined,
       username,
       role: localStorage.getItem('role') || undefined,
+      email: localStorage.getItem('email') || undefined,
+      contact_preference: localStorage.getItem('contact_preference') || undefined,
+      created_at: localStorage.getItem('created_at') || undefined,
+      display_name: localStorage.getItem('display_name') || undefined,
+      phone: localStorage.getItem('phone') || undefined,
       token,
     };
+  }
+
+  private setOptionalStorageValue(key: string, value: string | undefined): void {
+    const cleanValue = value?.trim();
+    if (cleanValue) {
+      localStorage.setItem(key, cleanValue);
+      return;
+    }
+
+    localStorage.removeItem(key);
+  }
+
+  private clearProfileStorage(): void {
+    localStorage.removeItem('display_name');
+    localStorage.removeItem('email');
+    localStorage.removeItem('contact_preference');
+    localStorage.removeItem('created_at');
+    localStorage.removeItem('phone');
   }
 }
