@@ -153,7 +153,7 @@
     @if (history.length > 0) {
       <div class="history-list">
         @for (scan of history; track scan.scan_id) {
-          <article class="history-item">
+          <a class="history-item history-link" [routerLink]="['/ai/scans', scan.scan_id]">
             <div>
               <div class="history-heading">
                 <strong>{{ scan.label }}</strong>
@@ -167,7 +167,7 @@
               <span>{{ confidencePercent(scan) }}</span>
               <small>{{ scan.monitoring_advice || 'Monitoring advice available' }}</small>
             </div>
-          </article>
+          </a>
         }
       </div>
     } @else {

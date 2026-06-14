@@ -151,6 +151,7 @@ export interface CropDetectionResponse {
 export interface CropScanResponse {
   scan_id: string;
   farm_id?: string | null;
+  farm_name?: string | null;
   crop_type?: string | null;
   model_mode: 'simulated_ai';
   model_type: 'crop_leaf_health_classifier';
@@ -175,6 +176,7 @@ export interface CropScanResponse {
   when_to_seek_expert_help?: string;
   confidence_explanation?: string;
   advisory_disclaimer?: string;
+  created_at?: string;
   timestamp: string;
 }
 
@@ -378,6 +380,10 @@ export class ApiService {
 
   getCropScans() {
     return this.http.get<CropScanListResponse>(`${this.baseUrl}/ai/scans`);
+  }
+
+  getCropScan(scanId: string) {
+    return this.http.get<CropScanResponse>(`${this.baseUrl}/ai/scans/${scanId}`);
   }
 
   getFarmCropScans(id: string) {

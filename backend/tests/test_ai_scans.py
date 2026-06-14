@@ -63,6 +63,22 @@ def _create_farm_for(username, farm_name="Scan Farm"):
     )
 
 
+def _upload_scan(client, token, filename="healthy_leaf.png", farm_id=None, crop_type="Tomato"):
+    data = {
+        "image": (BytesIO(PNG_1X1), filename),
+        "crop_type": crop_type,
+    }
+    if farm_id:
+        data["farm_id"] = farm_id
+
+    return client.post(
+        "/api/ai/crop-scan",
+        data=data,
+        content_type="multipart/form-data",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+
 def test_authenticated_user_can_upload_valid_crop_scan(client):
     token = _login_token(client)
     farm_id = _create_farm_for("farmer_one")
@@ -149,6 +165,84 @@ def test_user_can_list_only_own_crop_scans(client):
     payload = response.get_json()
     assert payload["count"] == 1
     assert payload["scans"][0]["image_metadata"]["filename"] == "healthy_leaf.png"
+
+
+def test_owner_can_get_crop_scan_detail(client):
+    token = _login_token(client)
+    farm_id = _create_farm_for("farmer_one", farm_name="Detail Farm")
+    upload_response = _upload_scan(client, token, filename="water_stress_leaf.png", farm_id=farm_id)
+    scan_id = upload_response.get_json()["scan_id"]
+
+    response = client.get(
+        f"/api/ai/scans/{scan_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    payload = response.get_json()
+    assert response.status_code == 200
+    assert payload["scan_id"] == scan_id
+    assert payload["farm_id"] == farm_id
+    assert payload["farm_name"] == "Detail Farm"
+    assert payload["crop_type"] == "Tomato"
+    assert payload["image_metadata"]["filename"] == "water_stress_leaf.png"
+    assert payload["recommendation"]
+    assert payload["possible_causes"]
+    assert payload["immediate_actions"]
+    assert payload["prevention_plan"]
+    assert payload["monitoring_advice"]
+    assert payload["advisory_disclaimer"]
+    assert payload["created_at"]
+    assert "_id" not in payload
+    assert "user_id" not in payload
+    assert "username" not in payload
+
+
+def test_other_user_cannot_get_crop_scan_detail(client):
+    owner_token = _login_token(client, username="owner_user")
+    other_token = _login_token(client, username="other_farmer")
+    upload_response = _upload_scan(client, owner_token, filename="owner_leaf.png")
+    scan_id = upload_response.get_json()["scan_id"]
+
+    response = client.get(
+        f"/api/ai/scans/{scan_id}",
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+
+    assert response.status_code == 403
+    assert response.get_json()["message"] == "You do not have permission to view this scan."
+
+
+def test_admin_can_get_crop_scan_detail_for_other_user(client):
+    owner_token = _login_token(client, username="owner_user")
+    admin_token = _login_token(client, username="admin_user", role="admin")
+    upload_response = _upload_scan(client, owner_token, filename="admin_view_leaf.png")
+    scan_id = upload_response.get_json()["scan_id"]
+
+    response = client.get(
+        f"/api/ai/scans/{scan_id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["scan_id"] == scan_id
+
+
+def test_crop_scan_detail_requires_authentication(client):
+    response = client.get(f"/api/ai/scans/{ObjectId()}")
+
+    assert response.status_code == 401
+
+
+def test_crop_scan_detail_invalid_id_returns_404(client):
+    token = _login_token(client)
+
+    response = client.get(
+        "/api/ai/scans/not-a-scan-id",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+    assert response.get_json()["message"] == "Scan not found."
 
 
 def test_crop_scan_returns_expanded_advice_and_stores_it(client):

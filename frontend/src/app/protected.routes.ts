@@ -38,6 +38,13 @@ export const protectedRoutes: Routes = [
           ),
       },
       {
+        path: 'ai/scans/:id',
+        loadComponent: () =>
+          import('./components/ai/crop-scan-detail/crop-scan-detail').then(
+            (m) => m.CropScanDetail
+          ),
+      },
+      {
         path: 'profile',
         loadComponent: () =>
           import('./components/profile/profile').then((m) => m.Profile),

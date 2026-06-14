@@ -296,10 +296,18 @@ def _scan_response(scan_doc):
     prediction = scan_doc.get("prediction", {})
     created_at = scan_doc.get("created_at") or datetime.now(timezone.utc)
     timestamp = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
+    farm_name = None
+    farm_id = scan_doc.get("farm_id")
+
+    if farm_id and ObjectId.is_valid(farm_id):
+        farm = config.get_db().farms.find_one({"_id": ObjectId(farm_id)}, {"farm_name": 1})
+        if farm:
+            farm_name = farm.get("farm_name")
 
     return {
         "scan_id": str(scan_doc["_id"]),
-        "farm_id": scan_doc.get("farm_id"),
+        "farm_id": farm_id,
+        "farm_name": scan_doc.get("farm_name") or farm_name,
         "crop_type": scan_doc.get("crop_type"),
         "model_mode": scan_doc.get("model_mode", "simulated_ai"),
         "model_type": "crop_leaf_health_classifier",
@@ -318,6 +326,7 @@ def _scan_response(scan_doc):
         "advisory_disclaimer": scan_doc.get("advisory_disclaimer", ""),
         "latency_ms": scan_doc.get("latency_ms"),
         "image_metadata": scan_doc.get("image_metadata", {}),
+        "created_at": timestamp,
         "timestamp": timestamp,
     }
 
@@ -453,6 +462,23 @@ def list_crop_scans(current_user):
             "scans": [_scan_response(scan) for scan in scans],
         }
     )
+
+
+@smart_bp.route("/api/ai/scans/<scan_id>", methods=["GET"])
+@jwt_required
+def get_crop_scan(current_user, scan_id):
+    if not ObjectId.is_valid(scan_id):
+        return _json_response({"message": "Scan not found."}, 404)
+
+    scan = config.get_db().ai_scans.find_one({"_id": ObjectId(scan_id)})
+    if scan is None:
+        return _json_response({"message": "Scan not found."}, 404)
+
+    is_owner = scan.get("user_id") == _current_user_id(current_user)
+    if not (is_owner or _is_admin(current_user)):
+        return _json_response({"message": "You do not have permission to view this scan."}, 403)
+
+    return _json_response(_scan_response(scan))
 
 
 @smart_bp.route("/api/farms/<farm_id>/ai-scans", methods=["GET"])

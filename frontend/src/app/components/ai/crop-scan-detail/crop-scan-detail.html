@@ -1,0 +1,144 @@
+<main class="crop-scan-detail-page">
+  <section class="scan-header">
+    <div>
+      <p class="eyebrow">AI Crop Scan</p>
+      <h1>Scan detail</h1>
+      <p>Review the saved diagnosis, confidence score, and crop health recommendations.</p>
+    </div>
+    <a routerLink="/ai/crop-scan" class="btn btn-outline-success btn-sm">Back to scan history</a>
+  </section>
+
+  @if (loading) {
+    <section class="scan-card">
+      <div class="empty-result">
+        <h3>Loading scan...</h3>
+        <p>Fetching the saved AI crop health result.</p>
+      </div>
+    </section>
+  }
+
+  @if (!loading && errorMessage) {
+    <section class="scan-card">
+      <div class="alert alert-danger mb-0" role="alert">{{ errorMessage }}</div>
+    </section>
+  }
+
+  @if (!loading && scan) {
+    <section class="scan-grid">
+      <article class="scan-card result-card">
+        <div class="scan-card-header">
+          <div>
+            <p class="eyebrow">Diagnosis</p>
+            <h2>{{ scan.label }}</h2>
+          </div>
+          <span class="severity severity-{{ scan.severity || 'low' }}">{{ scan.severity || 'low' }}</span>
+        </div>
+
+        <div class="diagnosis">
+          <h3>{{ scan.recommendation }}</h3>
+          <p>{{ scan.advisory_disclaimer || 'This AI crop scan is advisory support only.' }}</p>
+        </div>
+
+        <div class="metric-row">
+          <span>Confidence</span>
+          <strong>{{ confidencePercent(scan) }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>Severity</span>
+          <strong>{{ scan.severity || 'low' }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>Farm</span>
+          <strong>{{ farmLabel(scan) }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>Crop</span>
+          <strong>{{ scan.crop_type || 'Crop not specified' }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>Created</span>
+          <strong>{{ (scan.created_at || scan.timestamp) | date:'medium' }}</strong>
+        </div>
+      </article>
+
+      <article class="scan-card">
+        <div class="scan-card-header">
+          <div>
+            <p class="eyebrow">Image Metadata</p>
+            <h2>Saved image details</h2>
+          </div>
+        </div>
+
+        <div class="disclaimer-box image-note">
+          <strong>Image preview unavailable</strong>
+          <p>Image preview is not stored in this MVP; only scan metadata and diagnosis are saved.</p>
+        </div>
+
+        <div class="metric-row">
+          <span>File</span>
+          <strong>{{ scan.image_metadata.filename || 'Image' }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>Metadata</span>
+          <strong>{{ imageDetails(scan) }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>Model mode</span>
+          <strong>{{ scan.model_mode }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>Future model</span>
+          <strong>{{ scan.future_upgrade_model }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>Latency</span>
+          <strong>{{ scan.latency_ms }} ms</strong>
+        </div>
+      </article>
+    </section>
+
+    <section class="scan-card result-card">
+      <div class="scan-card-header">
+        <div>
+          <p class="eyebrow">Recommendations</p>
+          <h2>Action guidance</h2>
+        </div>
+      </div>
+
+      <div class="advice-grid">
+        <div>
+          <h4>Possible causes</h4>
+          <ul class="steps-list">
+            <li *ngFor="let cause of scan.possible_causes || []">{{ cause }}</li>
+          </ul>
+        </div>
+
+        <div>
+          <h4>Immediate actions</h4>
+          <ul class="steps-list">
+            <li *ngFor="let action of scan.immediate_actions || []">{{ action }}</li>
+          </ul>
+        </div>
+
+        <div>
+          <h4>Prevention plan</h4>
+          <ul class="steps-list">
+            <li *ngFor="let step of scan.prevention_plan || scan.prevention_steps">{{ step }}</li>
+          </ul>
+        </div>
+
+        <div>
+          <h4>Monitoring advice</h4>
+          <p class="advice-copy">
+            {{ scan.monitoring_advice || 'Monitor the crop closely and compare the next scan with current results.' }}
+          </p>
+        </div>
+      </div>
+
+      <div class="disclaimer-box">
+        <strong>Advisory disclaimer</strong>
+        <p>{{ scan.advisory_disclaimer || 'This advice is informational only and should be confirmed with field checks.' }}</p>
+      </div>
+    </section>
+  }
+</main>
