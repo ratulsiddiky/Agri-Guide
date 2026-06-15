@@ -23,6 +23,8 @@ export interface RegisterRequest {
 export interface RegisterResponse {
   message: string;
   verification_link?: string;
+  email_verification_required?: boolean;
+  email_sent?: boolean;
 }
 
 export interface UserProfile {
@@ -41,6 +43,12 @@ export interface UpdateProfileRequest {
   contact_preference: string;
   display_name?: string;
   phone?: string;
+}
+
+export interface VerificationResponse {
+  message: string;
+  email_verification_required?: boolean;
+  email_sent?: boolean;
 }
 
 @Injectable({
@@ -93,8 +101,18 @@ export class AuthService {
   }
 
 
-  verifyEmail(verificationLink: string): Observable<{ message: string }> {
+  verifyEmail(verificationLink: string): Observable<VerificationResponse> {
     return this.http.get<{ message: string }>(verificationLink);
+  }
+
+  verifyEmailToken(token: string): Observable<VerificationResponse> {
+    return this.http.post<VerificationResponse>(`${this.baseUrl}/users/verify-email`, { token });
+  }
+
+  resendVerification(identifier: string): Observable<VerificationResponse> {
+    return this.http.post<VerificationResponse>(`${this.baseUrl}/users/resend-verification`, {
+      identifier,
+    });
   }
 
   getProfile(): Observable<UserProfile> {

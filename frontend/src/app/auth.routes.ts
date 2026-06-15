@@ -16,4 +16,9 @@ export const authRoutes: Routes = [
     loadComponent: () =>
       import('./components/auth/register/register').then((m) => m.Register),
   },
+  {
+    path: 'verify-email',
+    loadComponent: () =>
+      import('./components/auth/verify-email/verify-email').then((m) => m.VerifyEmail),
+  },
 ];

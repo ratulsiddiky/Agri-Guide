@@ -1,10 +1,9 @@
 from datetime import datetime, timedelta, timezone
 import secrets
-import smtplib
+from urllib.parse import urlencode
 
 import bcrypt
 import jwt
-from bson import ObjectId
 from flask import Blueprint, jsonify, make_response, request
 from flask_cors import cross_origin  
 from pymongo.errors import PyMongoError
@@ -13,10 +12,12 @@ from blueprints.auth.models import validate_profile_update_payload, validate_sig
 import config
 from decorators import jwt_required
 from extensions import limiter
-from utils.emailer import send_verification_email
+from utils.emailer import email_delivery_config_error, send_verification_email
 from utils.validators import serialize_document
 
 auth_bp = Blueprint("auth_bp", __name__)
+
+VERIFICATION_TOKEN_HOURS = 24
 
 
 def _safe_user_profile(user):
@@ -30,6 +31,60 @@ def _safe_user_profile(user):
         "display_name": user.get("display_name", ""),
         "phone": user.get("phone", ""),
     }
+
+
+def _now_utc():
+    return datetime.now(timezone.utc)
+
+
+def _verification_deadline():
+    return _now_utc() + timedelta(hours=VERIFICATION_TOKEN_HOURS)
+
+
+def _generate_verification_token():
+    return secrets.token_urlsafe(32)
+
+
+def _verification_link(token):
+    return f"{config.Config.FRONTEND_VERIFY_EMAIL_URL}?{urlencode({'token': token})}"
+
+
+def _email_is_verified(user):
+    if user.get("is_verified") is True:
+        return True
+    if user.get("email_verified") is True:
+        return True
+    if "email_verified" in user:
+        return False
+    if "is_verified" in user:
+        return False
+    return True
+
+
+def _coerce_utc(value):
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _public_verification_message(sent):
+    if sent:
+        return "Account created. Please check your email to verify your account before logging in."
+    return (
+        "Account created. Email verification is disabled in this demo environment, "
+        "so you can log in now."
+    )
+
+
+def _generic_resend_message(sent):
+    if sent:
+        return "If an unverified account exists, a verification email has been sent."
+    return (
+        "If an account exists, Email verification is disabled in this demo environment "
+        "and no email was sent."
+    )
 
 
 @auth_bp.route("/api/users/signup", methods=["POST"])
@@ -54,54 +109,83 @@ def signup():
         bcrypt.gensalt(),
     ).decode("utf-8")
 
+    email_config_error = email_delivery_config_error()
+    email_required = email_config_error is None
+    verification_token = _generate_verification_token() if email_required else None
+
+    user_document = {
+        "username": payload["username"],
+        "email": payload["email"],
+        "password": hashed_password,
+        "role": payload["role"],
+        "contact_preference": payload["contact_preference"],
+        "email_verified": not email_required,
+        "is_verified": not email_required,
+        "created_at": _now_utc(),
+    }
+    if email_required:
+        user_document["verification_token"] = verification_token
+        user_document["verification_token_expires_at"] = _verification_deadline()
+
     try:
-        result = users.insert_one(
-            {
-                "username": payload["username"],
-                "email": payload["email"],
-                "password": hashed_password,
-                "role": payload["role"],
-                "contact_preference": payload["contact_preference"],
-                "is_verified": True, 
-                "created_at": datetime.now(timezone.utc),
-            }
-        )
+        users.insert_one(user_document)
     except PyMongoError as exc:
         return make_response(jsonify({"message": "Database error", "error": str(exc)}), 500)
+
+    email_sent = False
+    if email_required:
+        email_sent, _ = send_verification_email(
+            to_email=payload["email"],
+            verification_link=_verification_link(verification_token),
+        )
 
     return make_response(
         jsonify(
             {
-                "message": f"✅ Account created for {payload['username']} successfully! You can now log in.",
+                "message": _public_verification_message(email_sent),
+                "email_verification_required": email_required,
+                "email_sent": email_sent,
             }
         ),
         201,
     )
 
 
+@auth_bp.route("/api/users/verify-email", methods=["GET", "POST"])
 @auth_bp.route("/api/users/verify", methods=["GET"])
 @cross_origin()
 @limiter.limit("30 per hour")
 def verify_email():
-    token = request.args.get("token", "").strip()
+    if request.method == "POST":
+        payload = request.get_json(silent=True) or {}
+        token = str(payload.get("token", "")).strip()
+    else:
+        token = request.args.get("token", "").strip()
+
     if not token:
         return make_response(jsonify({"message": "Missing verification token"}), 400)
 
     users = config.get_db().users
-    now = datetime.now(timezone.utc)  
+    now = _now_utc()
 
     try:
         user = users.find_one({"verification_token": token})
         if not user:
             return make_response(jsonify({"message": "Invalid verification link"}), 400)
 
-        expires_at = user.get("verification_token_expires_at")
-        if not isinstance(expires_at, datetime) or expires_at < now:  
+        expires_at = _coerce_utc(user.get("verification_token_expires_at"))
+        if expires_at is None or expires_at < now:
             return make_response(jsonify({"message": "Verification link expired"}), 400)
 
         result = users.update_one(
             {"_id": user["_id"]},
-            {"$set": {"is_verified": True}, "$unset": {"verification_token": "", "verification_token_expires_at": ""}},
+            {
+                "$set": {"email_verified": True, "is_verified": True},
+                "$unset": {
+                    "verification_token": "",
+                    "verification_token_expires_at": "",
+                },
+            },
         )
     except PyMongoError as exc:
         return make_response(jsonify({"message": "Database error", "error": str(exc)}), 500)
@@ -111,6 +195,64 @@ def verify_email():
 
     return make_response(
         jsonify({"message": "✅ Email successfully verified! You can now log in."}),
+        200,
+    )
+
+
+@auth_bp.route("/api/users/resend-verification", methods=["POST"])
+@cross_origin()
+@limiter.limit("5 per minute")
+def resend_verification():
+    payload = request.get_json(silent=True) or {}
+    identifier = str(
+        payload.get("identifier")
+        or payload.get("email")
+        or payload.get("username")
+        or ""
+    ).strip()
+
+    email_config_error = email_delivery_config_error()
+    email_required = email_config_error is None
+    email_sent = False
+
+    if identifier and email_required:
+        users = config.get_db().users
+        query = {
+            "$or": [
+                {"username": identifier},
+                {"email": identifier.lower()},
+            ]
+        }
+        try:
+            user = users.find_one(query)
+            if user and not _email_is_verified(user):
+                token = _generate_verification_token()
+                users.update_one(
+                    {"_id": user["_id"]},
+                    {
+                        "$set": {
+                            "verification_token": token,
+                            "verification_token_expires_at": _verification_deadline(),
+                            "email_verified": False,
+                            "is_verified": False,
+                        }
+                    },
+                )
+                email_sent, _ = send_verification_email(
+                    to_email=user["email"],
+                    verification_link=_verification_link(token),
+                )
+        except PyMongoError as exc:
+            return make_response(jsonify({"message": "Database error", "error": str(exc)}), 500)
+
+    return make_response(
+        jsonify(
+            {
+                "message": _generic_resend_message(email_sent),
+                "email_verification_required": email_required,
+                "email_sent": email_sent,
+            }
+        ),
         200,
     )
 
@@ -134,7 +276,7 @@ def login():
     if not user:
         return make_response(jsonify({"message": "User not found"}), 404)
 
-    if not user.get("is_verified", False):
+    if not _email_is_verified(user):
         return make_response(
             jsonify({"message": "Please verify your email before logging in."}),
             403,

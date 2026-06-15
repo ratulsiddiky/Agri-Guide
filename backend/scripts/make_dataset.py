@@ -37,6 +37,7 @@ def main():
                 "password": hashed_password,
                 "role": roles[index],
                 "contact_preference": "email",
+                "email_verified": True,
                 "is_verified": True,
                 "created_at": datetime.utcnow(),
             }

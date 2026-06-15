@@ -101,13 +101,9 @@ export class Register implements OnDestroy {
       )
       .subscribe({
         next: (response) => {
-          this.successMessage = response.message || '✅ Account created successfully!';
+          this.successMessage =
+            response.message || 'Account created. Check your email to verify your account.';
           this.cdr.markForCheck();
-          
-          
-          setTimeout(() => {
-            void this.router.navigate(['/login']);
-          }, 2000);
         },
         error: (err: unknown) => {
           const errorPayload = err as { error?: { message?: string }; status?: number };

@@ -48,6 +48,10 @@ class Config:
     SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
     SMTP_USE_TLS = _as_bool(os.getenv("SMTP_USE_TLS"), default=True)
     EMAIL_FROM = os.getenv("EMAIL_FROM")
+    FRONTEND_VERIFY_EMAIL_URL = os.getenv(
+        "FRONTEND_VERIFY_EMAIL_URL",
+        "http://localhost:4200/verify-email",
+    )
 
     RATE_LIMIT_DEFAULTS = [
         os.getenv("RATE_LIMIT_DEFAULT_1", "200 per day"),

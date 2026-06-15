@@ -1,14 +1,32 @@
 import smtplib
+import threading
 from email.message import EmailMessage
 
 from config import Config
 
 
-import smtplib
-import threading  
-from email.message import EmailMessage
+def email_delivery_config_error():
+    if not Config.EMAIL_ENABLED:
+        return "EMAIL_ENABLED is false"
 
-from config import Config
+    missing = [
+        name
+        for name, value in {
+            "SMTP_HOST": Config.SMTP_HOST,
+            "SMTP_USERNAME": Config.SMTP_USERNAME,
+            "SMTP_PASSWORD": Config.SMTP_PASSWORD,
+            "EMAIL_FROM": Config.EMAIL_FROM,
+        }.items()
+        if not value
+    ]
+    if missing:
+        return f"Missing email configuration: {', '.join(missing)}"
+
+    return None
+
+
+def is_email_delivery_configured():
+    return email_delivery_config_error() is None
 
 
 def _send_email_sync(to_email: str, subject: str, text_body: str):
@@ -32,26 +50,14 @@ def _send_email_sync(to_email: str, subject: str, text_body: str):
 
 def send_email(*, to_email: str, subject: str, text_body: str):
     """Non-blocking email send - runs in background thread."""
-    if not Config.EMAIL_ENABLED:
-        return False, "EMAIL_ENABLED is false"
-
-    missing = [
-        name
-        for name, value in {
-            "SMTP_HOST": Config.SMTP_HOST,
-            "SMTP_USERNAME": Config.SMTP_USERNAME,
-            "SMTP_PASSWORD": Config.SMTP_PASSWORD,
-            "EMAIL_FROM": Config.EMAIL_FROM,
-        }.items()
-        if not value
-    ]
-    if missing:
-        return False, f"Missing email configuration: {', '.join(missing)}"
+    config_error = email_delivery_config_error()
+    if config_error:
+        return False, config_error
 
     thread = threading.Thread(
         target=_send_email_sync,
         args=(to_email, subject, text_body),
-        daemon=True
+        daemon=True,
     )
     thread.start()
 
@@ -67,4 +73,3 @@ def send_verification_email(*, to_email: str, verification_link: str):
         "If you did not create an account, you can ignore this email.\n"
     )
     return send_email(to_email=to_email, subject=subject, text_body=text_body)
-

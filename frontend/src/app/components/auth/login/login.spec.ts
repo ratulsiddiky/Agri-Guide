@@ -20,6 +20,7 @@ describe('Login', () => {
           useValue: {
             isAuthenticated: () => false,
             login: () => ({ subscribe: () => undefined }),
+            resendVerification: () => ({ subscribe: () => undefined }),
             emailVerifiedSuccessfully: signal(false), 
           },
         },

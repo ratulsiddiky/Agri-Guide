@@ -27,7 +27,11 @@ export class Login implements OnDestroy {
   });
 
   errorMessage = '';
+  resendMessage = '';
+  resendErrorMessage = '';
+  showResendVerification = false;
   loading = false;
+  resendLoading = false;
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -62,6 +66,9 @@ export class Login implements OnDestroy {
 
     this.loading = true;
     this.errorMessage = '';
+    this.resendMessage = '';
+    this.resendErrorMessage = '';
+    this.showResendVerification = false;
 
     
     this.loginForm.disable();
@@ -79,7 +86,38 @@ export class Login implements OnDestroy {
           this.loginForm.enable();
           this.errorMessage =
             err.error?.message || 'Login failed. Please check your credentials.';
+          this.showResendVerification = this.errorMessage
+            .toLowerCase()
+            .includes('verify your email');
           this.notificationService.showError(this.errorMessage);
+        },
+      });
+  }
+
+  onResendVerification(): void {
+    const identifier = this.loginForm.controls.username.value.trim();
+    if (!identifier) {
+      this.resendErrorMessage = 'Enter your username, then request a new verification email.';
+      return;
+    }
+
+    this.resendLoading = true;
+    this.resendMessage = '';
+    this.resendErrorMessage = '';
+
+    this.authService
+      .resendVerification(identifier)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          this.resendLoading = false;
+          this.resendMessage = response.message || 'Verification request processed.';
+        },
+        error: (err: unknown) => {
+          const errorPayload = err as { error?: { message?: string } };
+          this.resendLoading = false;
+          this.resendErrorMessage =
+            errorPayload.error?.message || 'Unable to resend verification email right now.';
         },
       });
   }

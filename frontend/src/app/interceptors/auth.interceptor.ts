@@ -9,7 +9,10 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const isAuthRequest =
     req.url.includes('/login') ||
     req.url.includes('/users/register') ||
-    req.url.includes('/users/signup');
+    req.url.includes('/users/signup') ||
+    req.url.includes('/users/verify-email') ||
+    req.url.includes('/users/verify') ||
+    req.url.includes('/users/resend-verification');
 
   if (isAuthRequest) {
     return next(req);

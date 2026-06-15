@@ -22,6 +22,33 @@
             </div>
           }
 
+          @if (showResendVerification) {
+            <div class="alert alert-warning py-2" role="status">
+              <div class="small mb-2">
+                Need a new verification email? Use the username above and request another link.
+              </div>
+              @if (resendMessage) {
+                <div class="text-success small mb-2">{{ resendMessage }}</div>
+              }
+              @if (resendErrorMessage) {
+                <div class="text-danger small mb-2">{{ resendErrorMessage }}</div>
+              }
+              <button
+                type="button"
+                class="btn btn-outline-success btn-sm"
+                [disabled]="resendLoading"
+                (click)="onResendVerification()"
+              >
+                @if (resendLoading) {
+                  <span class="spinner-border spinner-border-sm me-2"></span>
+                  Sending...
+                } @else {
+                  Resend Verification
+                }
+              </button>
+            </div>
+          }
+
           <div class="mb-3">
             <label for="username" class="form-label fw-semibold">Username</label>
             <input

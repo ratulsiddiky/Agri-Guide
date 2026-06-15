@@ -1,11 +1,12 @@
 from base64 import b64encode
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import mongomock
 import pytest
 
 import config
+import blueprints.auth.auth as auth_module
 from app import create_app
 
 
@@ -38,6 +39,7 @@ def _insert_verified_user(username="farmer_one", password_text="Password123!", r
             "password": password,
             "role": role,
             "contact_preference": "email",
+            "email_verified": True,
             "is_verified": True,
             "verification_token": "secret-token",
             "verification_token_expires_at": datetime.now(timezone.utc),
@@ -63,7 +65,47 @@ def test_signup_creates_user(client):
     )
 
     assert response.status_code == 201
-    assert "Account created for new_farmer" in response.get_json()["message"]
+    body = response.get_json()
+    stored_user = config.get_db().users.find_one({"username": "new_farmer"})
+    assert body["email_verification_required"] is False
+    assert "Email verification is disabled in this demo environment" in body["message"]
+    assert stored_user["email_verified"] is True
+    assert stored_user["is_verified"] is True
+    assert "verification_token" not in stored_user
+
+
+def test_signup_requires_verification_when_email_is_configured(client, monkeypatch):
+    monkeypatch.setattr(config.Config, "EMAIL_ENABLED", True)
+    monkeypatch.setattr(config.Config, "SMTP_HOST", "smtp-relay.brevo.com")
+    monkeypatch.setattr(config.Config, "SMTP_USERNAME", "smtp-user@example.com")
+    monkeypatch.setattr(config.Config, "SMTP_PASSWORD", "smtp-password")
+    monkeypatch.setattr(config.Config, "EMAIL_FROM", "no-reply@example.com")
+    monkeypatch.setattr(
+        auth_module,
+        "send_verification_email",
+        lambda **kwargs: (True, None),
+    )
+
+    response = client.post(
+        "/api/users/signup",
+        json={
+            "username": "new_farmer",
+            "email": "new_farmer@example.com",
+            "password": "Password123!",
+        },
+    )
+
+    body = response.get_json()
+    stored_user = config.get_db().users.find_one({"username": "new_farmer"})
+    assert response.status_code == 201
+    assert body["email_verification_required"] is True
+    assert body["email_sent"] is True
+    assert body["message"] == "Account created. Please check your email to verify your account before logging in."
+    assert stored_user["email_verified"] is False
+    assert stored_user["is_verified"] is False
+    assert stored_user["verification_token"]
+    assert stored_user["verification_token_expires_at"]
+    assert "verification_token" not in body
 
 
 def test_basic_auth_login_works(client):
@@ -145,6 +187,7 @@ def test_login_requires_verified_user(client):
             "email": "farmer_one@example.com",
             "password": password,
             "role": "user",
+            "email_verified": False,
             "is_verified": False,
         }
     )
@@ -152,6 +195,134 @@ def test_login_requires_verified_user(client):
     response = client.post("/api/login", headers=_basic_auth("farmer_one", "Password123!"))
     assert response.status_code == 403
     assert response.get_json()["message"] == "Please verify your email before logging in."
+
+
+def test_login_allows_legacy_user_without_verification_fields(client):
+    password = bcrypt.hashpw(b"Password123!", bcrypt.gensalt()).decode("utf-8")
+    config.get_db().users.insert_one(
+        {
+            "username": "legacy_farmer",
+            "email": "legacy@example.com",
+            "password": password,
+            "role": "user",
+        }
+    )
+
+    response = client.post("/api/login", headers=_basic_auth("legacy_farmer", "Password123!"))
+    assert response.status_code == 200
+    assert response.get_json()["token"]
+
+
+def test_login_allows_legacy_user_with_is_verified_true(client):
+    password = bcrypt.hashpw(b"Password123!", bcrypt.gensalt()).decode("utf-8")
+    config.get_db().users.insert_one(
+        {
+            "username": "legacy_verified",
+            "email": "legacy_verified@example.com",
+            "password": password,
+            "role": "user",
+            "is_verified": True,
+        }
+    )
+
+    response = client.post("/api/login", headers=_basic_auth("legacy_verified", "Password123!"))
+    assert response.status_code == 200
+    assert response.get_json()["token"]
+
+
+def test_verify_email_token_marks_user_verified(client):
+    password = bcrypt.hashpw(b"Password123!", bcrypt.gensalt()).decode("utf-8")
+    config.get_db().users.insert_one(
+        {
+            "username": "new_farmer",
+            "email": "new_farmer@example.com",
+            "password": password,
+            "role": "user",
+            "email_verified": False,
+            "is_verified": False,
+            "verification_token": "valid-token",
+            "verification_token_expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
+        }
+    )
+
+    verify_response = client.post("/api/users/verify-email", json={"token": "valid-token"})
+    login_response = client.post("/api/login", headers=_basic_auth("new_farmer", "Password123!"))
+    stored_user = config.get_db().users.find_one({"username": "new_farmer"})
+
+    assert verify_response.status_code == 200
+    assert stored_user["email_verified"] is True
+    assert stored_user["is_verified"] is True
+    assert "verification_token" not in stored_user
+    assert "verification_token_expires_at" not in stored_user
+    assert login_response.status_code == 200
+
+
+def test_verify_email_rejects_invalid_token(client):
+    response = client.post("/api/users/verify-email", json={"token": "not-real"})
+
+    assert response.status_code == 400
+    assert response.get_json()["message"] == "Invalid verification link"
+
+
+def test_verify_email_rejects_expired_token(client):
+    config.get_db().users.insert_one(
+        {
+            "username": "new_farmer",
+            "email": "new_farmer@example.com",
+            "password": "not-used",
+            "role": "user",
+            "email_verified": False,
+            "is_verified": False,
+            "verification_token": "expired-token",
+            "verification_token_expires_at": datetime.now(timezone.utc) - timedelta(minutes=1),
+        }
+    )
+
+    response = client.post("/api/users/verify-email", json={"token": "expired-token"})
+
+    assert response.status_code == 400
+    assert response.get_json()["message"] == "Verification link expired"
+
+
+def test_resend_verification_returns_generic_message_and_rotates_token(client, monkeypatch):
+    monkeypatch.setattr(config.Config, "EMAIL_ENABLED", True)
+    monkeypatch.setattr(config.Config, "SMTP_HOST", "smtp-relay.brevo.com")
+    monkeypatch.setattr(config.Config, "SMTP_USERNAME", "smtp-user@example.com")
+    monkeypatch.setattr(config.Config, "SMTP_PASSWORD", "smtp-password")
+    monkeypatch.setattr(config.Config, "EMAIL_FROM", "no-reply@example.com")
+    monkeypatch.setattr(
+        auth_module,
+        "send_verification_email",
+        lambda **kwargs: (True, None),
+    )
+    config.get_db().users.insert_one(
+        {
+            "username": "new_farmer",
+            "email": "new_farmer@example.com",
+            "password": "not-used",
+            "role": "user",
+            "email_verified": False,
+            "is_verified": False,
+            "verification_token": "old-token",
+            "verification_token_expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
+        }
+    )
+
+    response = client.post("/api/users/resend-verification", json={"identifier": "new_farmer"})
+    stored_user = config.get_db().users.find_one({"username": "new_farmer"})
+
+    assert response.status_code == 200
+    assert response.get_json()["message"] == "If an unverified account exists, a verification email has been sent."
+    assert stored_user["verification_token"] != "old-token"
+    assert "verification_token" not in response.get_json()
+
+
+def test_resend_verification_is_demo_safe_when_email_disabled(client):
+    response = client.post("/api/users/resend-verification", json={"identifier": "missing_user"})
+
+    assert response.status_code == 200
+    assert response.get_json()["email_verification_required"] is False
+    assert "Email verification is disabled in this demo environment" in response.get_json()["message"]
 
 
 def test_logout_blacklists_token(client):

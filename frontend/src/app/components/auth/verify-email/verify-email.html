@@ -1,0 +1,34 @@
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-success text-white text-center py-3">
+          <h3 class="mb-0">Verify Email</h3>
+        </div>
+
+        <div class="card-body p-4 text-center">
+          @if (loading) {
+            <div class="py-4">
+              <span class="spinner-border text-success mb-3"></span>
+              <p class="mb-0 text-muted">Verifying your email...</p>
+            </div>
+          }
+
+          @if (successMessage) {
+            <div class="alert alert-success" role="status">
+              {{ successMessage }}
+            </div>
+            <a routerLink="/login" class="btn btn-success w-100">Go to Login</a>
+          }
+
+          @if (errorMessage) {
+            <div class="alert alert-danger" role="alert">
+              {{ errorMessage }}
+            </div>
+            <a routerLink="/login" class="btn btn-outline-success w-100">Back to Login</a>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
