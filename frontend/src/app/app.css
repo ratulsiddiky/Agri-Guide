@@ -11,6 +11,18 @@
 	color: #f8fafc;
 }
 
+.site-brand {
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.site-brand-logo {
+	height: 40px;
+	width: auto;
+	flex: 0 0 auto;
+	object-fit: contain;
+}
+
 .site-navbar .nav-link:hover,
 .site-navbar .navbar-brand:hover {
 	color: #fef3c7;
@@ -39,6 +51,10 @@
 }
 
 @media (max-width: 768px) {
+	.site-brand-logo {
+		height: 34px;
+	}
+
 	.app-shell {
 		padding-left: 0.85rem;
 		padding-right: 0.85rem;
