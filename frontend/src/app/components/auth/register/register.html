@@ -1,14 +1,13 @@
 <div class="container mt-4">
   <div class="card shadow-sm border-0 mx-auto" style="max-width: 500px;">
-    <div class="card-header bg-success text-white d-flex align-items-center gap-2">
-      <span style="font-size: 1.5rem;">🌾</span>
-      <h5 class="mb-0">Create Account</h5>
+    <div class="card-header bg-success text-white d-flex align-items-center justify-content-center gap-2 py-3">
+      <img src="assets/images/agriguide_logo.png" alt="Agri Guide" class="auth-brand-logo auth-brand-logo--register" />
+      <h5 class="mb-0 auth-brand-title">Create Account</h5>
     </div>
 
     <div class="card-body p-4">
       @if (successMessage) {
         <div class="alert alert-success d-flex align-items-center gap-2" role="status">
-          <span style="font-size: 1.5rem;">✅</span>
           <div>
             <strong>{{ successMessage }}</strong>
             <p class="mb-0 small text-muted">After verification, return to login to continue.</p>
@@ -18,7 +17,6 @@
 
       @if (errorMessage) {
         <div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
-          <span style="font-size: 1.5rem;">❌</span>
           <div>{{ errorMessage }}</div>
         </div>
       }
@@ -93,7 +91,7 @@
             <span class="spinner-border spinner-border-sm me-2"></span>
             Creating Account...
           } @else {
-            ✏️ Create Account
+            Create Account
           }
         </button>
       </form>

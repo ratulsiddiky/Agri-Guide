@@ -1,3 +1,28 @@
 .card {
   border-radius: 12px;
 }
+
+.auth-brand-logo {
+  height: 46px;
+  width: auto;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.auth-brand-logo--verify {
+  height: 44px;
+}
+
+.auth-brand-title {
+  line-height: 1.1;
+}
+
+@media (max-width: 576px) {
+  .auth-brand-logo {
+    height: 40px;
+  }
+
+  .auth-brand-title {
+    font-size: 1.15rem;
+  }
+}

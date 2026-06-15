@@ -1,0 +1,24 @@
+ .auth-brand-logo {
+	height: 48px;
+	width: auto;
+	object-fit: contain;
+	flex: 0 0 auto;
+}
+
+.auth-brand-logo--register {
+	height: 46px;
+}
+
+.auth-brand-title {
+	line-height: 1.1;
+}
+
+@media (max-width: 576px) {
+	.auth-brand-logo {
+		height: 42px;
+	}
+
+	.auth-brand-title {
+		font-size: 1.1rem;
+	}
+}
