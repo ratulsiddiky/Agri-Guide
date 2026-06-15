@@ -1,6 +1,6 @@
 # SUBMISSION Testing Summary (CW1)
 
-This document provides evidence of automated API testing for the SmartAgri Guide Flask backend.
+This document provides evidence of automated API testing for the Agri Guide Flask backend.
 
 ## Test Framework and Scope
 

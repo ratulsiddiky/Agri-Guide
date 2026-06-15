@@ -81,7 +81,7 @@ Demo steps:
 
 "This is the Agri-Guide Home dashboard.
 
-At the top, the dashboard shows a clean SmartAgri overview. The KPI cards show total farms, active alerts, total sensors, average soil moisture, and today's forecast.
+At the top, the dashboard shows a clean Agri Guide overview. The KPI cards show total farms, active alerts, total sensors, average soil moisture, and today's forecast.
 
 Below that, the smart agriculture cards show live-style backend values for system health, sensor readings, irrigation decision, AI crop detection, weather alert, and failover testing."
 

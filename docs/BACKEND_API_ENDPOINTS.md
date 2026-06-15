@@ -1,6 +1,6 @@
 # SUBMISSION API Endpoints (CW1)
 
-This document summarizes the Flask API endpoints implemented for the SmartAgri Guide backend.
+This document summarizes the Flask API endpoints implemented for the Agri Guide backend.
 
 Base URL (local default): `http://127.0.0.1:5001`
 

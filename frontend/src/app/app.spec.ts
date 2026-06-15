@@ -28,6 +28,6 @@ describe('AppComponent', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('.navbar-brand')?.textContent).toContain('SmartAgri Guide');
+    expect(compiled.querySelector('.navbar-brand')?.textContent).toContain('Agri Guide');
   });
-}); 
+});

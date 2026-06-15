@@ -65,9 +65,9 @@ def send_email(*, to_email: str, subject: str, text_body: str):
 
 
 def send_verification_email(*, to_email: str, verification_link: str):
-    subject = "Verify your SmartAgri-Guide account"
+    subject = "Verify your Agri Guide account"
     text_body = (
-        "Welcome!\n\n"
+        "Welcome to Agri Guide!\n\n"
         "Please verify your email address by clicking the link below:\n\n"
         f"{verification_link}\n\n"
         "If you did not create an account, you can ignore this email.\n"
