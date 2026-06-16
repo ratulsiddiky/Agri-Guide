@@ -70,3 +70,23 @@ def validate_profile_update_payload(data):
         updates[field] = value_clean
 
     return updates, None
+
+
+def validate_password_reset_payload(data):
+    if not isinstance(data, dict):
+        return None, "Invalid JSON body."
+
+    token = data.get("token")
+    new_password = data.get("new_password")
+
+    if not is_non_empty_string(token):
+        return None, "Reset token is required."
+
+    password_error = validate_password_strength(new_password)
+    if password_error:
+        return None, password_error
+
+    return {
+        "token": token.strip(),
+        "new_password": new_password.strip(),
+    }, None

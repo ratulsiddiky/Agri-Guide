@@ -325,6 +325,128 @@ def test_resend_verification_is_demo_safe_when_email_disabled(client):
     assert "Email verification is disabled in this demo environment" in response.get_json()["message"]
 
 
+def test_forgot_password_returns_generic_message_for_existing_user(client, monkeypatch):
+    sent_messages = []
+    _insert_verified_user()
+    monkeypatch.setattr(
+        auth_module,
+        "send_password_reset_email",
+        lambda **kwargs: sent_messages.append(kwargs) or (True, None),
+    )
+
+    response = client.post("/api/users/forgot-password", json={"identifier": "farmer_one"})
+    stored_user = config.get_db().users.find_one({"username": "farmer_one"})
+
+    assert response.status_code == 200
+    assert response.get_json()["message"] == auth_module.GENERIC_PASSWORD_RESET_MESSAGE
+    assert stored_user["password_reset_token"]
+    assert stored_user["password_reset_token_expires_at"]
+    assert sent_messages[0]["to_email"] == "farmer_one@example.com"
+    assert stored_user["password_reset_token"] in sent_messages[0]["reset_link"]
+    assert "password_reset_token" not in response.get_json()
+
+
+def test_forgot_password_returns_generic_message_for_missing_user(client, monkeypatch):
+    sent_messages = []
+    monkeypatch.setattr(
+        auth_module,
+        "send_password_reset_email",
+        lambda **kwargs: sent_messages.append(kwargs) or (True, None),
+    )
+
+    response = client.post("/api/users/forgot-password", json={"identifier": "missing_user"})
+
+    assert response.status_code == 200
+    assert response.get_json()["message"] == auth_module.GENERIC_PASSWORD_RESET_MESSAGE
+    assert sent_messages == []
+
+
+def test_reset_password_with_valid_token_updates_password_and_clears_token(client):
+    _insert_verified_user()
+    config.get_db().users.update_one(
+        {"username": "farmer_one"},
+        {
+            "$set": {
+                "password_reset_token": "valid-reset-token",
+                "password_reset_token_expires_at": datetime.now(timezone.utc) + timedelta(minutes=30),
+            }
+        },
+    )
+
+    reset_response = client.post(
+        "/api/users/reset-password",
+        json={"token": "valid-reset-token", "new_password": "NewPassword123!"},
+    )
+    new_login_response = client.post(
+        "/api/login",
+        headers=_basic_auth("farmer_one", "NewPassword123!"),
+    )
+    old_login_response = client.post(
+        "/api/login",
+        headers=_basic_auth("farmer_one", "Password123!"),
+    )
+    stored_user = config.get_db().users.find_one({"username": "farmer_one"})
+
+    assert reset_response.status_code == 200
+    assert reset_response.get_json()["message"] == "Password reset successfully. You can now log in."
+    assert new_login_response.status_code == 200
+    assert old_login_response.status_code == 401
+    assert "password_reset_token" not in stored_user
+    assert "password_reset_token_expires_at" not in stored_user
+
+
+def test_reset_password_rejects_invalid_token(client):
+    response = client.post(
+        "/api/users/reset-password",
+        json={"token": "not-real", "new_password": "NewPassword123!"},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["message"] == "Invalid password reset link"
+
+
+def test_reset_password_rejects_expired_token(client):
+    _insert_verified_user()
+    config.get_db().users.update_one(
+        {"username": "farmer_one"},
+        {
+            "$set": {
+                "password_reset_token": "expired-reset-token",
+                "password_reset_token_expires_at": datetime.now(timezone.utc) - timedelta(minutes=1),
+            }
+        },
+    )
+
+    response = client.post(
+        "/api/users/reset-password",
+        json={"token": "expired-reset-token", "new_password": "NewPassword123!"},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["message"] == "Password reset link expired"
+
+
+def test_reset_password_rejects_weak_password(client):
+    _insert_verified_user()
+    config.get_db().users.update_one(
+        {"username": "farmer_one"},
+        {
+            "$set": {
+                "password_reset_token": "valid-reset-token",
+                "password_reset_token_expires_at": datetime.now(timezone.utc) + timedelta(minutes=30),
+            }
+        },
+    )
+
+    response = client.post(
+        "/api/users/reset-password",
+        json={"token": "valid-reset-token", "new_password": "short"},
+    )
+
+    assert response.status_code == 400
+    assert "Password" in response.get_json()["message"]
+
+
 def test_logout_blacklists_token(client):
     password = bcrypt.hashpw(b"Password123!", bcrypt.gensalt()).decode("utf-8")
     config.get_db().users.insert_one(

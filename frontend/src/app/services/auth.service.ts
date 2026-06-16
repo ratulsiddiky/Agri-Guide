@@ -51,6 +51,10 @@ export interface VerificationResponse {
   email_sent?: boolean;
 }
 
+export interface PasswordResetResponse {
+  message: string;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -112,6 +116,19 @@ export class AuthService {
   resendVerification(identifier: string): Observable<VerificationResponse> {
     return this.http.post<VerificationResponse>(`${this.baseUrl}/users/resend-verification`, {
       identifier,
+    });
+  }
+
+  forgotPassword(identifier: string): Observable<PasswordResetResponse> {
+    return this.http.post<PasswordResetResponse>(`${this.baseUrl}/users/forgot-password`, {
+      identifier,
+    });
+  }
+
+  resetPassword(token: string, newPassword: string): Observable<PasswordResetResponse> {
+    return this.http.post<PasswordResetResponse>(`${this.baseUrl}/users/reset-password`, {
+      token,
+      new_password: newPassword,
     });
   }
 

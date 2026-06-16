@@ -52,6 +52,10 @@ class Config:
         "FRONTEND_VERIFY_EMAIL_URL",
         "http://localhost:4200/verify-email",
     )
+    FRONTEND_RESET_PASSWORD_URL = os.getenv(
+        "FRONTEND_RESET_PASSWORD_URL",
+        "https://agri-guide-seven.vercel.app/reset-password",
+    )
 
     RATE_LIMIT_DEFAULTS = [
         os.getenv("RATE_LIMIT_DEFAULT_1", "200 per day"),

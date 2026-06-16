@@ -8,16 +8,28 @@ from flask import Blueprint, jsonify, make_response, request
 from flask_cors import cross_origin  
 from pymongo.errors import PyMongoError
 
-from blueprints.auth.models import validate_profile_update_payload, validate_signup_payload
+from blueprints.auth.models import (
+    validate_password_reset_payload,
+    validate_profile_update_payload,
+    validate_signup_payload,
+)
 import config
 from decorators import jwt_required
 from extensions import limiter
-from utils.emailer import email_delivery_config_error, send_verification_email
+from utils.emailer import (
+    email_delivery_config_error,
+    send_password_reset_email,
+    send_verification_email,
+)
 from utils.validators import serialize_document
 
 auth_bp = Blueprint("auth_bp", __name__)
 
 VERIFICATION_TOKEN_HOURS = 24
+PASSWORD_RESET_TOKEN_MINUTES = 60
+GENERIC_PASSWORD_RESET_MESSAGE = (
+    "If an Agri Guide account exists, a password reset email has been sent."
+)
 
 
 def _safe_user_profile(user):
@@ -41,12 +53,24 @@ def _verification_deadline():
     return _now_utc() + timedelta(hours=VERIFICATION_TOKEN_HOURS)
 
 
+def _password_reset_deadline():
+    return _now_utc() + timedelta(minutes=PASSWORD_RESET_TOKEN_MINUTES)
+
+
 def _generate_verification_token():
+    return secrets.token_urlsafe(32)
+
+
+def _generate_password_reset_token():
     return secrets.token_urlsafe(32)
 
 
 def _verification_link(token):
     return f"{config.Config.FRONTEND_VERIFY_EMAIL_URL}?{urlencode({'token': token})}"
+
+
+def _password_reset_link(token):
+    return f"{config.Config.FRONTEND_RESET_PASSWORD_URL}?{urlencode({'token': token})}"
 
 
 def _email_is_verified(user):
@@ -253,6 +277,99 @@ def resend_verification():
                 "email_sent": email_sent,
             }
         ),
+        200,
+    )
+
+
+@auth_bp.route("/api/users/forgot-password", methods=["POST"])
+@cross_origin()
+@limiter.limit("5 per minute")
+def forgot_password():
+    payload = request.get_json(silent=True) or {}
+    identifier = str(
+        payload.get("identifier")
+        or payload.get("email")
+        or payload.get("username")
+        or ""
+    ).strip()
+
+    if not identifier:
+        return make_response(jsonify({"message": GENERIC_PASSWORD_RESET_MESSAGE}), 200)
+
+    users = config.get_db().users
+    query = {
+        "$or": [
+            {"username": identifier},
+            {"email": identifier.lower()},
+        ]
+    }
+
+    try:
+        user = users.find_one(query)
+        if user:
+            token = _generate_password_reset_token()
+            users.update_one(
+                {"_id": user["_id"]},
+                {
+                    "$set": {
+                        "password_reset_token": token,
+                        "password_reset_token_expires_at": _password_reset_deadline(),
+                    }
+                },
+            )
+            send_password_reset_email(
+                to_email=user["email"],
+                reset_link=_password_reset_link(token),
+            )
+    except PyMongoError as exc:
+        return make_response(jsonify({"message": "Database error", "error": str(exc)}), 500)
+
+    return make_response(jsonify({"message": GENERIC_PASSWORD_RESET_MESSAGE}), 200)
+
+
+@auth_bp.route("/api/users/reset-password", methods=["POST"])
+@cross_origin()
+@limiter.limit("10 per hour")
+def reset_password():
+    payload, error = validate_password_reset_payload(request.get_json(silent=True))
+    if error:
+        return make_response(jsonify({"message": error}), 400)
+
+    users = config.get_db().users
+    now = _now_utc()
+
+    try:
+        user = users.find_one({"password_reset_token": payload["token"]})
+        if not user:
+            return make_response(jsonify({"message": "Invalid password reset link"}), 400)
+
+        expires_at = _coerce_utc(user.get("password_reset_token_expires_at"))
+        if expires_at is None or expires_at < now:
+            return make_response(jsonify({"message": "Password reset link expired"}), 400)
+
+        hashed_password = bcrypt.hashpw(
+            payload["new_password"].encode("utf-8"),
+            bcrypt.gensalt(),
+        ).decode("utf-8")
+
+        result = users.update_one(
+            {"_id": user["_id"]},
+            {
+                "$set": {"password": hashed_password},
+                "$unset": {
+                    "password_reset_token": "",
+                    "password_reset_token_expires_at": "",
+                },
+            },
+        )
+    except PyMongoError as exc:
+        return make_response(jsonify({"message": "Database error", "error": str(exc)}), 500)
+
+    if result.matched_count == 0:
+        return make_response(jsonify({"message": "User not found"}), 404)
+
+    return make_response(
+        jsonify({"message": "Password reset successfully. You can now log in."}),
         200,
     )
 

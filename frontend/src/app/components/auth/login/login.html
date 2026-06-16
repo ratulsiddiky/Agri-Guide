@@ -77,6 +77,11 @@
             @if (loginForm.controls.password.touched && loginForm.controls.password.invalid) {
               <div class="text-danger small mt-1">Password is required.</div>
             }
+            <div class="text-end mt-2">
+              <a routerLink="/forgot-password" class="small fw-semibold text-success">
+                Forgot password?
+              </a>
+            </div>
           </div>
 
           <button

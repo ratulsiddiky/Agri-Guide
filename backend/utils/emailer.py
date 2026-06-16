@@ -73,3 +73,14 @@ def send_verification_email(*, to_email: str, verification_link: str):
         "If you did not create an account, you can ignore this email.\n"
     )
     return send_email(to_email=to_email, subject=subject, text_body=text_body)
+
+
+def send_password_reset_email(*, to_email: str, reset_link: str):
+    subject = "Reset your Agri Guide password"
+    text_body = (
+        "We received a request to reset your Agri Guide password.\n\n"
+        "Use the link below within 60 minutes to choose a new password:\n\n"
+        f"{reset_link}\n\n"
+        "If you did not request this reset, you can ignore this email.\n"
+    )
+    return send_email(to_email=to_email, subject=subject, text_body=text_body)
