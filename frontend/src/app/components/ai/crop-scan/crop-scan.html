@@ -79,6 +79,19 @@
       </div>
 
       @if (result) {
+        <div class="scan-preview">
+          @if (resultImageUrl) {
+            <img [src]="resultImageUrl" [alt]="result.image_metadata?.filename || 'Crop scan image preview'" />
+          } @else if (resultImageLoading) {
+            <div class="preview-placeholder">Loading image preview...</div>
+          } @else if (resultImageUnavailable) {
+            <div class="disclaimer-box image-note">
+              <strong>Image preview unavailable</strong>
+              <p>Image preview is not stored for this scan.</p>
+            </div>
+          }
+        </div>
+
         <div class="diagnosis">
           <span class="severity" [ngClass]="'severity-' + result.severity">{{ result.severity }}</span>
           <h3>{{ result.label }}</h3>

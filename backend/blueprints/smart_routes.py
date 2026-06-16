@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from io import BytesIO
+import os
 import random
 from time import perf_counter
 
@@ -14,6 +15,22 @@ try:
     from PIL import Image
 except ImportError:  # pragma: no cover - optional dependency
     Image = None
+
+try:
+    from azure.core.exceptions import AzureError, ResourceExistsError, ResourceNotFoundError
+    from azure.storage.blob import BlobServiceClient, ContentSettings
+except ImportError:  # pragma: no cover - optional dependency
+    class AzureError(Exception):
+        pass
+
+    class ResourceExistsError(AzureError):
+        pass
+
+    class ResourceNotFoundError(AzureError):
+        pass
+
+    BlobServiceClient = None
+    ContentSettings = None
 
 
 smart_bp = Blueprint("smart_bp", __name__)
@@ -292,6 +309,94 @@ def _allowed_scan_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_SCAN_EXTENSIONS
 
 
+def _env_bool(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _azure_scan_storage_config():
+    if not _env_bool("AI_SCAN_IMAGE_STORAGE_ENABLED", default=False):
+        return None
+
+    connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "").strip()
+    container_name = os.getenv("AZURE_STORAGE_CONTAINER_NAME", "crop-scans").strip()
+    if not connection_string or not container_name or BlobServiceClient is None:
+        return None
+
+    return {
+        "connection_string": connection_string,
+        "container_name": container_name,
+    }
+
+
+def _blob_name_segment(value, fallback):
+    cleaned = secure_filename(str(value or "").strip())
+    return cleaned or fallback
+
+
+def _build_scan_blob_name(scan_doc):
+    user_id = _blob_name_segment(scan_doc.get("user_id"), "unknown-user")
+    farm_id = _blob_name_segment(scan_doc.get("farm_id"), "none")
+    scan_id = _blob_name_segment(scan_doc.get("_id"), "unknown-scan")
+    filename = _blob_name_segment(
+        scan_doc.get("image_metadata", {}).get("filename"),
+        "crop-image",
+    )
+    return f"{user_id}/{farm_id}/{scan_id}/{filename}"
+
+
+def _get_scan_container_client(ensure_exists=False):
+    storage_config = _azure_scan_storage_config()
+    if storage_config is None:
+        return None
+
+    service_client = BlobServiceClient.from_connection_string(
+        storage_config["connection_string"]
+    )
+    container_client = service_client.get_container_client(storage_config["container_name"])
+    if ensure_exists:
+        try:
+            container_client.create_container()
+        except ResourceExistsError:
+            pass
+    return container_client
+
+
+def _upload_scan_image_to_blob(scan_doc, image_bytes):
+    try:
+        container_client = _get_scan_container_client(ensure_exists=True)
+        if container_client is None:
+            return None
+
+        blob_name = _build_scan_blob_name(scan_doc)
+        content_type = scan_doc.get("image_metadata", {}).get("content_type")
+        upload_kwargs = {"overwrite": True}
+        if ContentSettings is not None and content_type:
+            upload_kwargs["content_settings"] = ContentSettings(content_type=content_type)
+
+        container_client.upload_blob(name=blob_name, data=image_bytes, **upload_kwargs)
+        return {
+            "image_storage_provider": "azure_blob",
+            "image_blob_name": blob_name,
+            "image_content_type": content_type,
+            "image_size_bytes": len(image_bytes),
+            "image_original_filename": scan_doc.get("image_metadata", {}).get("filename"),
+        }
+    except Exception:
+        return None
+
+
+def _download_scan_image_from_blob(scan_doc):
+    container_client = _get_scan_container_client()
+    if container_client is None:
+        return None
+
+    downloader = container_client.download_blob(scan_doc["image_blob_name"])
+    return downloader.readall()
+
+
 def _image_metadata(file_storage, image_bytes):
     filename = secure_filename(file_storage.filename or "crop-image")
     metadata = {
@@ -367,14 +472,19 @@ def _scan_response(scan_doc):
     farm_name = None
     farm_id = scan_doc.get("farm_id")
     likely_causes = scan_doc.get("likely_causes") or scan_doc.get("possible_causes", [])
+    scan_id = str(scan_doc["_id"])
+    has_image = bool(
+        scan_doc.get("image_storage_provider") == "azure_blob"
+        and scan_doc.get("image_blob_name")
+    )
 
     if farm_id and ObjectId.is_valid(farm_id):
         farm = config.get_db().farms.find_one({"_id": ObjectId(farm_id)}, {"farm_name": 1})
         if farm:
             farm_name = farm.get("farm_name")
 
-    return {
-        "scan_id": str(scan_doc["_id"]),
+    response = {
+        "scan_id": scan_id,
         "farm_id": farm_id,
         "farm_name": scan_doc.get("farm_name") or farm_name,
         "crop_type": scan_doc.get("crop_type"),
@@ -398,9 +508,13 @@ def _scan_response(scan_doc):
         "advisory_disclaimer": scan_doc.get("advisory_disclaimer", ""),
         "latency_ms": scan_doc.get("latency_ms"),
         "image_metadata": scan_doc.get("image_metadata", {}),
+        "has_image": has_image,
         "created_at": timestamp,
         "timestamp": timestamp,
     }
+    if has_image:
+        response["image_endpoint"] = f"/api/ai/scans/{scan_id}/image"
+    return response
 
 
 @smart_bp.route("/api/system/metrics", methods=["GET"])
@@ -514,6 +628,13 @@ def crop_health_scan(current_user):
 
     insert_result = config.get_db().ai_scans.insert_one(scan_doc)
     scan_doc["_id"] = insert_result.inserted_id
+    image_storage_fields = _upload_scan_image_to_blob(scan_doc, image_bytes)
+    if image_storage_fields:
+        config.get_db().ai_scans.update_one(
+            {"_id": scan_doc["_id"]},
+            {"$set": image_storage_fields},
+        )
+        scan_doc.update(image_storage_fields)
 
     return _json_response(_scan_response(scan_doc), 201)
 
@@ -551,6 +672,43 @@ def get_crop_scan(current_user, scan_id):
         return _json_response({"message": "You do not have permission to view this scan."}, 403)
 
     return _json_response(_scan_response(scan))
+
+
+@smart_bp.route("/api/ai/scans/<scan_id>/image", methods=["GET"])
+@jwt_required
+def get_crop_scan_image(current_user, scan_id):
+    if not ObjectId.is_valid(scan_id):
+        return _json_response({"message": "Scan image not found."}, 404)
+
+    scan = config.get_db().ai_scans.find_one({"_id": ObjectId(scan_id)})
+    if scan is None:
+        return _json_response({"message": "Scan image not found."}, 404)
+
+    is_owner = scan.get("user_id") == _current_user_id(current_user)
+    if not (is_owner or _is_admin(current_user)):
+        return _json_response({"message": "You do not have permission to view this scan image."}, 403)
+
+    if scan.get("image_storage_provider") != "azure_blob" or not scan.get("image_blob_name"):
+        return _json_response({"message": "Image preview is not stored for this scan."}, 404)
+
+    try:
+        image_bytes = _download_scan_image_from_blob(scan)
+    except ResourceNotFoundError:
+        return _json_response({"message": "Image preview is not stored for this scan."}, 404)
+    except AzureError:
+        return _json_response({"message": "Unable to load scan image preview."}, 502)
+    except Exception:
+        return _json_response({"message": "Unable to load scan image preview."}, 502)
+
+    if image_bytes is None:
+        return _json_response({"message": "Unable to load scan image preview."}, 502)
+
+    content_type = scan.get("image_content_type") or "application/octet-stream"
+    filename = secure_filename(scan.get("image_original_filename") or "crop-scan-image")
+    response = make_response(image_bytes)
+    response.headers["Content-Type"] = content_type
+    response.headers["Content-Disposition"] = f'inline; filename="{filename}"'
+    return response
 
 
 @smart_bp.route("/api/farms/<farm_id>/ai-scans", methods=["GET"])

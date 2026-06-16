@@ -109,6 +109,30 @@
   line-height: 1.55;
 }
 
+.scan-preview {
+  margin-bottom: 1rem;
+}
+
+.scan-preview img {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border: 1px solid #d7eee3;
+  border-radius: 12px;
+  background: #f6fbf8;
+}
+
+.preview-placeholder {
+  min-height: 180px;
+  display: grid;
+  place-content: center;
+  border: 1px dashed #b8dace;
+  border-radius: 12px;
+  color: #637b73;
+  background: #f6fbf8;
+}
+
 .metric-row {
   display: flex;
   align-items: center;

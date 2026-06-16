@@ -7,12 +7,56 @@ import pytest
 from bson import ObjectId
 
 import config
+import blueprints.smart_routes as smart_routes
 from app import create_app
 
 
 PNG_1X1 = b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
 )
+
+
+class _FakeContentSettings:
+    def __init__(self, content_type=None):
+        self.content_type = content_type
+
+
+class _FakeBlobDownload:
+    def __init__(self, data):
+        self.data = data
+
+    def readall(self):
+        return self.data
+
+
+class _FakeContainerClient:
+    blobs = {}
+    fail_upload = False
+
+    def create_container(self):
+        return None
+
+    def upload_blob(self, name, data, **kwargs):
+        if self.fail_upload:
+            raise RuntimeError("upload failed")
+        self.blobs[name] = {
+            "data": data,
+            "kwargs": kwargs,
+        }
+
+    def download_blob(self, name):
+        if name not in self.blobs:
+            raise smart_routes.ResourceNotFoundError("not found")
+        return _FakeBlobDownload(self.blobs[name]["data"])
+
+
+class _FakeBlobServiceClient:
+    @classmethod
+    def from_connection_string(cls, connection_string):
+        return cls()
+
+    def get_container_client(self, container_name):
+        return _FakeContainerClient()
 
 
 @pytest.fixture()
@@ -22,6 +66,11 @@ def client(monkeypatch):
     config.reset_db_cache()
     monkeypatch.setattr(config, "get_mongo_client", lambda: mock_client)
     monkeypatch.setattr(config, "get_db", lambda: mock_db)
+    monkeypatch.setenv("AI_SCAN_IMAGE_STORAGE_ENABLED", "false")
+    monkeypatch.delenv("AZURE_STORAGE_CONNECTION_STRING", raising=False)
+    monkeypatch.delenv("AZURE_STORAGE_CONTAINER_NAME", raising=False)
+    _FakeContainerClient.blobs = {}
+    _FakeContainerClient.fail_upload = False
 
     app = create_app()
     app.config.update(TESTING=True)
@@ -79,6 +128,16 @@ def _upload_scan(client, token, filename="healthy_leaf.png", farm_id=None, crop_
     )
 
 
+def _enable_mock_blob_storage(monkeypatch, fail_upload=False):
+    monkeypatch.setenv("AI_SCAN_IMAGE_STORAGE_ENABLED", "true")
+    monkeypatch.setenv("AZURE_STORAGE_CONNECTION_STRING", "UseDevelopmentStorage=true")
+    monkeypatch.setenv("AZURE_STORAGE_CONTAINER_NAME", "crop-scans")
+    monkeypatch.setattr(smart_routes, "BlobServiceClient", _FakeBlobServiceClient)
+    monkeypatch.setattr(smart_routes, "ContentSettings", _FakeContentSettings)
+    _FakeContainerClient.blobs = {}
+    _FakeContainerClient.fail_upload = fail_upload
+
+
 def test_authenticated_user_can_upload_valid_crop_scan(client):
     token = _login_token(client)
     farm_id = _create_farm_for("farmer_one")
@@ -114,6 +173,59 @@ def test_authenticated_user_can_upload_valid_crop_scan(client):
     stored_scan = config.get_db().ai_scans.find_one({"_id": ObjectId(payload["scan_id"])})
     assert stored_scan["user_id"] == str(config.get_db().users.find_one({"username": "farmer_one"})["_id"])
     assert stored_scan["farm_id"] == farm_id
+    assert payload["has_image"] is False
+    assert "image_endpoint" not in payload
+
+
+def test_crop_scan_saves_blob_metadata_when_storage_enabled(client, monkeypatch):
+    _enable_mock_blob_storage(monkeypatch)
+    token = _login_token(client)
+    farm_id = _create_farm_for("farmer_one")
+
+    response = _upload_scan(client, token, filename="healthy leaf.png", farm_id=farm_id)
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["has_image"] is True
+    assert payload["image_endpoint"] == f"/api/ai/scans/{payload['scan_id']}/image"
+
+    stored_scan = config.get_db().ai_scans.find_one({"_id": ObjectId(payload["scan_id"])})
+    user_id = str(config.get_db().users.find_one({"username": "farmer_one"})["_id"])
+    expected_blob_name = f"{user_id}/{farm_id}/{payload['scan_id']}/healthy_leaf.png"
+    assert stored_scan["image_storage_provider"] == "azure_blob"
+    assert stored_scan["image_blob_name"] == expected_blob_name
+    assert stored_scan["image_content_type"] == "image/png"
+    assert stored_scan["image_size_bytes"] == len(PNG_1X1)
+    assert stored_scan["image_original_filename"] == "healthy_leaf.png"
+    assert expected_blob_name in _FakeContainerClient.blobs
+    assert _FakeContainerClient.blobs[expected_blob_name]["data"] == PNG_1X1
+
+
+def test_crop_scan_storage_disabled_keeps_metadata_only_scan(client):
+    token = _login_token(client)
+
+    response = _upload_scan(client, token, filename="metadata_only.png")
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["has_image"] is False
+    assert "image_endpoint" not in payload
+    stored_scan = config.get_db().ai_scans.find_one({"_id": ObjectId(payload["scan_id"])})
+    assert "image_blob_name" not in stored_scan
+
+
+def test_crop_scan_upload_failure_keeps_metadata_only_scan(client, monkeypatch):
+    _enable_mock_blob_storage(monkeypatch, fail_upload=True)
+    token = _login_token(client)
+
+    response = _upload_scan(client, token, filename="failed_upload.png")
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["has_image"] is False
+    assert "image_endpoint" not in payload
+    stored_scan = config.get_db().ai_scans.find_one({"_id": ObjectId(payload["scan_id"])})
+    assert "image_blob_name" not in stored_scan
 
 
 def test_crop_scan_missing_image_returns_400(client):
@@ -236,6 +348,97 @@ def test_crop_scan_detail_requires_authentication(client):
     response = client.get(f"/api/ai/scans/{ObjectId()}")
 
     assert response.status_code == 401
+
+
+def test_crop_scan_image_requires_authentication(client):
+    response = client.get(f"/api/ai/scans/{ObjectId()}/image")
+
+    assert response.status_code == 401
+
+
+def test_owner_can_access_crop_scan_image(client, monkeypatch):
+    _enable_mock_blob_storage(monkeypatch)
+    token = _login_token(client)
+    upload_response = _upload_scan(client, token, filename="owner_leaf.png")
+    scan_id = upload_response.get_json()["scan_id"]
+
+    response = client.get(
+        f"/api/ai/scans/{scan_id}/image",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.data == PNG_1X1
+    assert response.headers["Content-Type"] == "image/png"
+    assert "inline" in response.headers["Content-Disposition"]
+    assert "owner_leaf.png" in response.headers["Content-Disposition"]
+
+
+def test_admin_can_access_crop_scan_image_for_other_user(client, monkeypatch):
+    _enable_mock_blob_storage(monkeypatch)
+    owner_token = _login_token(client, username="owner_user")
+    admin_token = _login_token(client, username="admin_user", role="admin")
+    upload_response = _upload_scan(client, owner_token, filename="admin_image.png")
+    scan_id = upload_response.get_json()["scan_id"]
+
+    response = client.get(
+        f"/api/ai/scans/{scan_id}/image",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.data == PNG_1X1
+
+
+def test_other_user_cannot_access_crop_scan_image(client, monkeypatch):
+    _enable_mock_blob_storage(monkeypatch)
+    owner_token = _login_token(client, username="owner_user")
+    other_token = _login_token(client, username="other_farmer")
+    upload_response = _upload_scan(client, owner_token, filename="private_leaf.png")
+    scan_id = upload_response.get_json()["scan_id"]
+
+    response = client.get(
+        f"/api/ai/scans/{scan_id}/image",
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+
+    assert response.status_code == 403
+    assert response.get_json()["message"] == "You do not have permission to view this scan image."
+
+
+def test_old_scan_without_image_returns_safe_404(client):
+    token = _login_token(client)
+    user = config.get_db().users.find_one({"username": "farmer_one"})
+    scan_id = config.get_db().ai_scans.insert_one(
+        {
+            "user_id": str(user["_id"]),
+            "username": "farmer_one",
+            "image_metadata": {"filename": "old_leaf.png"},
+            "prediction": {"label": "Healthy Leaf", "confidence": 0.9, "severity": "low"},
+            "recommendation": "Continue monitoring.",
+            "created_at": "2026-06-14T10:00:00Z",
+        }
+    ).inserted_id
+
+    response = client.get(
+        f"/api/ai/scans/{scan_id}/image",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+    assert response.get_json()["message"] == "Image preview is not stored for this scan."
+
+
+def test_crop_scan_image_invalid_id_returns_404(client):
+    token = _login_token(client)
+
+    response = client.get(
+        "/api/ai/scans/not-a-scan-id/image",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+    assert response.get_json()["message"] == "Scan image not found."
 
 
 def test_crop_scan_detail_invalid_id_returns_404(client):

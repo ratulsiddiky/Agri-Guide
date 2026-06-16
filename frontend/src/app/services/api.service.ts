@@ -169,6 +169,9 @@ export interface CropScanResponse {
     height?: number | null;
     format?: string | null;
   };
+  has_image?: boolean;
+  image_endpoint?: string;
+  image_url?: string;
   possible_causes?: string[];
   likely_causes?: string[];
   immediate_actions?: string[];
@@ -387,6 +390,12 @@ export class ApiService {
 
   getCropScan(scanId: string) {
     return this.http.get<CropScanResponse>(`${this.baseUrl}/ai/scans/${scanId}`);
+  }
+
+  getCropScanImage(scanId: string) {
+    return this.http.get(`${this.baseUrl}/ai/scans/${scanId}/image`, {
+      responseType: 'blob',
+    });
   }
 
   getFarmCropScans(id: string) {

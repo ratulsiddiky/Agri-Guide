@@ -28,6 +28,9 @@ export class CropScan implements OnInit, OnDestroy {
   errorMessage = '';
   successMessage = '';
   result: CropScanResponse | null = null;
+  resultImageUrl = '';
+  resultImageLoading = false;
+  resultImageUnavailable = false;
   history: CropScanResponse[] = [];
   private destroy$ = new Subject<void>();
 
@@ -46,6 +49,7 @@ export class CropScan implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.revokeResultImageUrl();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -85,6 +89,9 @@ export class CropScan implements OnInit, OnDestroy {
     this.errorMessage = '';
     this.successMessage = '';
     this.result = null;
+    this.resultImageLoading = false;
+    this.resultImageUnavailable = false;
+    this.revokeResultImageUrl();
     this.cdr.markForCheck();
 
     this.api.scanCropHealth(formData)
@@ -95,6 +102,7 @@ export class CropScan implements OnInit, OnDestroy {
           this.history = [scan, ...this.history.filter((item) => item.scan_id !== scan.scan_id)];
           this.successMessage = 'Crop scan completed and saved.';
           this.scanning = false;
+          this.loadResultImage(scan);
           this.cdr.markForCheck();
         },
         error: (error) => {
@@ -130,6 +138,40 @@ export class CropScan implements OnInit, OnDestroy {
 
     const farm = this.farms.find((item) => (item._id || item.id) === farmId);
     return farm?.farm_name || farm?.name || farmId;
+  }
+
+  private loadResultImage(scan: CropScanResponse): void {
+    if (!scan.has_image) {
+      this.resultImageUnavailable = true;
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.resultImageLoading = true;
+    this.resultImageUnavailable = false;
+    this.api.getCropScanImage(scan.scan_id)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (imageBlob) => {
+          this.revokeResultImageUrl();
+          this.resultImageUrl = URL.createObjectURL(imageBlob);
+          this.resultImageLoading = false;
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.revokeResultImageUrl();
+          this.resultImageLoading = false;
+          this.resultImageUnavailable = true;
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  private revokeResultImageUrl(): void {
+    if (this.resultImageUrl) {
+      URL.revokeObjectURL(this.resultImageUrl);
+      this.resultImageUrl = '';
+    }
   }
 
   private loadFarms(): void {

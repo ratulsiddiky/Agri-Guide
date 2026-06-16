@@ -10,6 +10,7 @@ describe('CropScanDetail', () => {
   let component: CropScanDetail;
   let apiServiceStub: {
     getCropScan: () => Observable<CropScanResponse>;
+    getCropScanImage: () => Observable<Blob>;
     getErrorMessage: (error: any) => string;
   };
 
@@ -74,8 +75,18 @@ describe('CropScanDetail', () => {
   }
 
   beforeEach(() => {
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: () => 'blob:mock-scan-image',
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: () => undefined,
+    });
+
     apiServiceStub = {
       getCropScan: () => of(scan),
+      getCropScanImage: () => of(new Blob(['preview'], { type: 'image/png' })),
       getErrorMessage: (error: any) => error?.error?.message || '',
     };
   });
@@ -97,9 +108,18 @@ describe('CropScanDetail', () => {
     await createComponent();
 
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.textContent).toContain(
-      'Image preview is not stored in this MVP; only scan metadata and diagnosis are saved.'
-    );
+    expect(compiled.textContent).toContain('Image preview is not stored for this scan.');
+  });
+
+  it('should render image preview when the scan has a stored image', async () => {
+    apiServiceStub.getCropScan = () => of({ ...scan, has_image: true });
+
+    await createComponent();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const image = compiled.querySelector('.scan-preview img') as HTMLImageElement | null;
+    expect(image?.getAttribute('src')).toBe('blob:mock-scan-image');
+    expect(compiled.textContent).not.toContain('Image preview is not stored for this scan.');
   });
 
   it('should show backend error message on load failure', async () => {

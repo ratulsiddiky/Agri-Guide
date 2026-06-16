@@ -15,6 +15,9 @@ import { ApiService, CropScanResponse } from '../../../services/api.service';
 })
 export class CropScanDetail implements OnInit, OnDestroy {
   scan: CropScanResponse | null = null;
+  imagePreviewUrl = '';
+  imagePreviewLoading = false;
+  imagePreviewUnavailable = false;
   loading = true;
   errorMessage = '';
   private destroy$ = new Subject<void>();
@@ -31,6 +34,7 @@ export class CropScanDetail implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.revokeImagePreviewUrl();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -61,12 +65,16 @@ export class CropScanDetail implements OnInit, OnDestroy {
 
     this.loading = true;
     this.errorMessage = '';
+    this.imagePreviewLoading = false;
+    this.imagePreviewUnavailable = false;
+    this.revokeImagePreviewUrl();
     this.api.getCropScan(scanId)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (scan) => {
           this.scan = scan;
           this.loading = false;
+          this.loadImagePreview(scan);
           this.cdr.markForCheck();
         },
         error: (error) => {
@@ -76,5 +84,39 @@ export class CropScanDetail implements OnInit, OnDestroy {
           this.cdr.markForCheck();
         },
       });
+  }
+
+  private loadImagePreview(scan: CropScanResponse): void {
+    if (!scan.has_image) {
+      this.imagePreviewUnavailable = true;
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.imagePreviewLoading = true;
+    this.imagePreviewUnavailable = false;
+    this.api.getCropScanImage(scan.scan_id)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (imageBlob) => {
+          this.revokeImagePreviewUrl();
+          this.imagePreviewUrl = URL.createObjectURL(imageBlob);
+          this.imagePreviewLoading = false;
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.revokeImagePreviewUrl();
+          this.imagePreviewLoading = false;
+          this.imagePreviewUnavailable = true;
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  private revokeImagePreviewUrl(): void {
+    if (this.imagePreviewUrl) {
+      URL.revokeObjectURL(this.imagePreviewUrl);
+      this.imagePreviewUrl = '';
+    }
   }
 }

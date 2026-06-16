@@ -69,9 +69,17 @@
           </div>
         </div>
 
-        <div class="disclaimer-box image-note">
-          <strong>Image preview unavailable</strong>
-          <p>Image preview is not stored in this MVP; only scan metadata and diagnosis are saved.</p>
+        <div class="scan-preview">
+          @if (imagePreviewUrl) {
+            <img [src]="imagePreviewUrl" [alt]="scan.image_metadata.filename || 'Crop scan image preview'" />
+          } @else if (imagePreviewLoading) {
+            <div class="preview-placeholder">Loading image preview...</div>
+          } @else if (imagePreviewUnavailable) {
+            <div class="disclaimer-box image-note">
+              <strong>Image preview unavailable</strong>
+              <p>Image preview is not stored for this scan.</p>
+            </div>
+          }
         </div>
 
         <div class="metric-row">
