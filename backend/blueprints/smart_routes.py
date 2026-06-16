@@ -19,6 +19,236 @@ except ImportError:  # pragma: no cover - optional dependency
 smart_bp = Blueprint("smart_bp", __name__)
 ALLOWED_SCAN_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 MAX_SCAN_BYTES = 5 * 1024 * 1024
+ADVISORY_DISCLAIMER = (
+    "This AI crop scan is advisory support only. Confirm important decisions with field scouting, local conditions, "
+    "and expert agronomy advice when needed."
+)
+
+CROP_DIAGNOSIS_KNOWLEDGE_BASE = {
+    "healthy": {
+        "label": "Healthy Leaf",
+        "keywords": ("healthy", "fresh", "normal", "clean", "good"),
+        "confidence_range": (0.82, 0.94),
+        "severity": "low",
+        "recommendation": "Crop appears healthy. Continue routine monitoring and keep sensor checks active.",
+        "explanation": "The leaf image does not show strong disease, pest, water stress, or nutrient imbalance cues.",
+        "severity_explanation": "Low severity means no urgent intervention is suggested from this image alone.",
+        "likely_causes": [
+            "Current field conditions appear stable",
+            "No major disease or stress markers detected in the image",
+            "Irrigation and nutrition levels may be in a normal range",
+        ],
+        "immediate_actions": [
+            "Continue routine scouting and keep the current management plan",
+            "Record the image as a healthy baseline for later comparison",
+        ],
+        "prevention_plan": [
+            "Keep checking soil moisture and weather changes each day",
+            "Inspect for new spots, wilting, or pest pressure weekly",
+            "Repeat the scan after major weather swings or crop stress events",
+        ],
+        "prevention_steps": [
+            "Inspect leaves weekly for new spots or discoloration.",
+            "Keep irrigation within the recommended soil moisture range.",
+            "Record follow-up images if weather becomes humid or unusually hot.",
+        ],
+        "monitoring_advice": "Re-scan in 5 to 7 days, or sooner if weather turns hot, wet, or windy.",
+        "when_to_seek_expert_help": "Seek expert help if symptoms spread quickly, several plants decline, or sensor data starts drifting from normal.",
+        "confidence_explanation": "The image matches a low-risk healthy-leaf pattern and does not show strong stress indicators.",
+    },
+    "leaf_blight": {
+        "label": "Leaf Blight Risk",
+        "keywords": ("blight", "spot", "spots", "lesion", "tomato"),
+        "confidence_range": (0.74, 0.88),
+        "severity": "medium",
+        "recommendation": "Remove affected leaves if visible and improve airflow around plants.",
+        "explanation": "Dark spots, lesions, or blight-like naming cues suggest a possible fungal leaf disease risk.",
+        "severity_explanation": "Medium severity means the crop should be inspected soon before symptoms spread across the canopy.",
+        "likely_causes": [
+            "Fungal pressure from warm, humid conditions",
+            "Splashing water or wet foliage helping leaf spots spread",
+            "Nearby infected plant material or crop residue",
+        ],
+        "immediate_actions": [
+            "Remove the most affected leaves if practical",
+            "Avoid overhead watering and improve airflow around the canopy",
+            "Check neighboring plants for the same symptoms",
+        ],
+        "prevention_plan": [
+            "Rotate crops between seasons where possible",
+            "Keep foliage dry during watering and prune crowded growth",
+            "Monitor humidity and leaf wetness after rainfall or irrigation",
+        ],
+        "prevention_steps": [
+            "Avoid overhead watering where possible.",
+            "Rotate susceptible crops between seasons.",
+            "Check nearby plants for dark circular leaf spots.",
+        ],
+        "monitoring_advice": "Inspect the crop again within 24 to 48 hours and watch for new dark circular spots.",
+        "when_to_seek_expert_help": "Ask an agronomist or plant pathologist if the spots spread rapidly, reach fruit or stems, or appear on multiple beds.",
+        "confidence_explanation": "The symptom pattern commonly aligns with leaf blight risk, so the recommendation is moderately confident.",
+    },
+    "powdery_mildew": {
+        "label": "Powdery Mildew Risk",
+        "keywords": ("mildew", "powder", "powdery", "white"),
+        "confidence_range": (0.73, 0.87),
+        "severity": "medium",
+        "recommendation": "Increase spacing or airflow and monitor humidity-heavy periods closely.",
+        "explanation": "White or powdery leaf cues are consistent with a humidity-linked fungal pressure pattern.",
+        "severity_explanation": "Medium severity means quick airflow and moisture management can help reduce spread.",
+        "likely_causes": [
+            "High humidity and poor airflow around leaves",
+            "Dense canopy trapping moisture",
+            "Recent weather that favors fungal growth",
+        ],
+        "immediate_actions": [
+            "Increase spacing or prune dense foliage to improve airflow",
+            "Water near the soil line and avoid wetting leaves",
+            "Check nearby plants for white powdery patches",
+        ],
+        "prevention_plan": [
+            "Track humidity-heavy periods and act early",
+            "Keep the crop canopy open and well ventilated",
+            "Re-scan after 48 hours if the white patches grow",
+        ],
+        "prevention_steps": [
+            "Prune dense foliage to reduce trapped humidity.",
+            "Water near the soil line early in the day.",
+            "Re-scan leaves after 48 hours if white patches spread.",
+        ],
+        "monitoring_advice": "Watch the crop daily during humid weather and repeat the scan after the next irrigation cycle.",
+        "when_to_seek_expert_help": "Seek help if the white growth spreads across most leaves, affects fruiting parts, or does not slow after airflow improvements.",
+        "confidence_explanation": "Visual cues are consistent with a humidity-linked fungal pattern, but severity can vary with local weather and crop stage.",
+    },
+    "rust": {
+        "label": "Rust Disease Risk",
+        "keywords": ("rust", "orange", "brown", "pustule", "rusty"),
+        "confidence_range": (0.72, 0.86),
+        "severity": "medium",
+        "recommendation": "Inspect both sides of leaves and remove heavily affected foliage where practical.",
+        "explanation": "Rust-like orange or brown speckling can indicate fungal spores developing on leaf surfaces.",
+        "severity_explanation": "Medium severity means the issue can spread under suitable weather and should be checked promptly.",
+        "likely_causes": [
+            "Rust fungus favored by leaf wetness and mild temperatures",
+            "Spores moving from nearby infected plants",
+            "Dense planting that keeps foliage damp",
+        ],
+        "immediate_actions": [
+            "Inspect the underside of leaves for orange or brown pustules",
+            "Remove severely affected leaves and avoid shaking spores onto healthy plants",
+            "Reduce leaf wetness by watering at soil level",
+        ],
+        "prevention_plan": [
+            "Improve air movement through spacing and pruning",
+            "Avoid working through wet crops when spores can spread",
+            "Rotate or separate susceptible crops where possible",
+        ],
+        "prevention_steps": [
+            "Check leaf undersides weekly for orange or brown marks.",
+            "Keep foliage dry during irrigation.",
+            "Remove crop debris that may carry spores into the next season.",
+        ],
+        "monitoring_advice": "Re-check in 24 to 48 hours and note whether orange or brown marks are increasing.",
+        "when_to_seek_expert_help": "Seek expert advice if rust marks spread across multiple plants or appear after repeated removal.",
+        "confidence_explanation": "The classification is based on rust-colored symptom cues, but field confirmation should check leaf undersides.",
+    },
+    "nutrient_deficiency": {
+        "label": "Nutrient Deficiency Signs",
+        "keywords": ("yellow", "nutrient", "pale", "deficiency", "chlorosis"),
+        "confidence_range": (0.7, 0.85),
+        "severity": "medium",
+        "recommendation": "Review recent fertiliser schedule and consider a soil nutrient test.",
+        "explanation": "Yellowing or pale leaf cues can indicate nutrient imbalance, pH issues, or reduced uptake.",
+        "severity_explanation": "Medium severity means yield may be affected if the underlying nutrient issue continues.",
+        "likely_causes": [
+            "Soil nutrient levels may be unbalanced",
+            "Soil pH may be limiting nutrient uptake",
+            "Recent fertiliser timing or rate may need review",
+        ],
+        "immediate_actions": [
+            "Review the fertiliser schedule and recent soil amendments",
+            "Check soil pH before applying more nutrients",
+            "Compare older leaves with newer growth for yellowing patterns",
+        ],
+        "prevention_plan": [
+            "Apply balanced nutrients gradually rather than in one large correction",
+            "Keep notes on what was applied and when",
+            "Test soil periodically to catch drift before yield loss appears",
+        ],
+        "prevention_steps": [
+            "Check soil pH before adding fertiliser.",
+            "Compare older and newer leaves for yellowing patterns.",
+            "Apply balanced nutrients gradually to avoid over-correction.",
+        ],
+        "monitoring_advice": "Re-check the crop after the next feeding cycle and watch whether the yellowing improves or worsens.",
+        "when_to_seek_expert_help": "Get expert support if symptoms keep spreading, several nutrient types look affected, or the crop stops responding to feeding.",
+        "confidence_explanation": "The leaf pattern matches common deficiency cues, but confirmation usually depends on soil or tissue testing.",
+    },
+    "pest_damage": {
+        "label": "Pest Damage Signs",
+        "keywords": ("pest", "insect", "bite", "holes", "chewed", "aphid", "caterpillar"),
+        "confidence_range": (0.71, 0.86),
+        "severity": "medium",
+        "recommendation": "Inspect leaves closely for insects, eggs, webbing, or fresh feeding damage.",
+        "explanation": "Chewing, holes, or insect-related cues suggest pest activity may be affecting the crop.",
+        "severity_explanation": "Medium severity means damage should be checked soon because pest pressure can increase quickly.",
+        "likely_causes": [
+            "Chewing or sap-feeding insects present on the crop",
+            "Eggs or larvae developing on leaf undersides",
+            "Nearby weeds or crop residue sheltering pests",
+        ],
+        "immediate_actions": [
+            "Inspect leaf undersides and growing tips for pests",
+            "Remove heavily damaged leaves if practical",
+            "Use sticky traps or manual counts to estimate pressure",
+        ],
+        "prevention_plan": [
+            "Remove nearby weeds that host pests",
+            "Encourage beneficial insects where suitable",
+            "Scout regularly during warm periods when pests reproduce faster",
+        ],
+        "prevention_steps": [
+            "Check leaf undersides for insects or eggs.",
+            "Record pest counts before choosing controls.",
+            "Keep field edges and weeds managed.",
+        ],
+        "monitoring_advice": "Scout again within 24 hours and compare damage levels across several plants.",
+        "when_to_seek_expert_help": "Seek expert help if pest numbers rise quickly, damage reaches new growth, or organic controls are not working.",
+        "confidence_explanation": "The image or filename cues match common pest damage patterns, but scouting is needed to identify the pest species.",
+    },
+    "water_stress": {
+        "label": "Water Stress Signs",
+        "keywords": ("dry", "wilt", "water", "stress", "drought", "droop"),
+        "confidence_range": (0.76, 0.9),
+        "severity": "high",
+        "recommendation": "Check soil moisture and irrigation coverage for this crop zone today.",
+        "explanation": "Wilting, dry, or stress cues suggest the plant may not be receiving or retaining enough water.",
+        "severity_explanation": "High severity means the crop should be checked today because water stress can cause rapid decline.",
+        "likely_causes": [
+            "Soil moisture is below the crop's preferred range",
+            "Irrigation coverage may be uneven or blocked",
+            "Hot or windy conditions could be increasing water loss",
+        ],
+        "immediate_actions": [
+            "Check soil moisture and irrigate affected zones today",
+            "Inspect emitters, hoses, or valves for blockages",
+            "Mulch exposed soil to reduce evaporation",
+        ],
+        "prevention_plan": [
+            "Track moisture more often during warm or windy weather",
+            "Confirm irrigation coverage across the full bed or block",
+            "Use trend checks to spot dry-down before plants wilt",
+        ],
+        "prevention_steps": [
+            "Inspect emitters or irrigation lines for blockages.",
+            "Mulch exposed soil to reduce evaporation.",
+            "Increase monitoring during warm or windy weather.",
+        ],
+        "monitoring_advice": "Monitor moisture again within a few hours after irrigation and re-scan tomorrow if stress remains visible.",
+        "when_to_seek_expert_help": "Seek expert help if irrigation fixes do not improve the crop quickly, or if large areas wilt at the same time.",
+        "confidence_explanation": "The image shows a pattern commonly linked to water stress and the urgency is reinforced by the high-risk label.",
+    },
+}
 
 
 def _timestamp():
@@ -86,209 +316,47 @@ def _image_metadata(file_storage, image_bytes):
 
 def _simulated_crop_prediction(filename, crop_type):
     haystack = f"{filename} {crop_type or ''}".lower()
-    if any(token in haystack for token in ("healthy", "fresh", "normal")):
-        label = "Healthy Leaf"
-    elif any(token in haystack for token in ("blight", "spot", "tomato")):
-        label = "Early Blight Risk"
-    elif any(token in haystack for token in ("mildew", "powder", "white")):
-        label = "Powdery Mildew Risk"
-    elif any(token in haystack for token in ("yellow", "nutrient", "pale", "deficiency")):
-        label = "Nutrient Deficiency Signs"
-    elif any(token in haystack for token in ("dry", "wilt", "water", "stress")):
-        label = "Water Stress Signs"
-    else:
-        label = random.choice(
-            [
-                "Healthy Leaf",
-                "Early Blight Risk",
-                "Powdery Mildew Risk",
-                "Nutrient Deficiency Signs",
-                "Water Stress Signs",
-            ]
-        )
+    diagnosis_key = next(
+        (
+            key
+            for key, entry in CROP_DIAGNOSIS_KNOWLEDGE_BASE.items()
+            if any(token in haystack for token in entry["keywords"])
+        ),
+        None,
+    )
+    if diagnosis_key is None:
+        diagnosis_key = random.choice(list(CROP_DIAGNOSIS_KNOWLEDGE_BASE.keys()))
 
-    guidance = {
-        "Healthy Leaf": {
-            "severity": "low",
-            "recommendation": "Crop appears healthy. Continue routine monitoring and keep sensor checks active.",
-            "prevention_steps": [
-                "Inspect leaves weekly for new spots or discoloration.",
-                "Keep irrigation within the recommended soil moisture range.",
-                "Record follow-up images if weather becomes humid or unusually hot.",
-            ],
-        },
-        "Early Blight Risk": {
-            "severity": "medium",
-            "recommendation": "Remove affected leaves if visible and improve airflow around plants.",
-            "prevention_steps": [
-                "Avoid overhead watering where possible.",
-                "Rotate susceptible crops between seasons.",
-                "Check nearby plants for dark circular leaf spots.",
-            ],
-        },
-        "Powdery Mildew Risk": {
-            "severity": "medium",
-            "recommendation": "Increase spacing or airflow and monitor humidity-heavy periods closely.",
-            "prevention_steps": [
-                "Prune dense foliage to reduce trapped humidity.",
-                "Water near the soil line early in the day.",
-                "Re-scan leaves after 48 hours if white patches spread.",
-            ],
-        },
-        "Nutrient Deficiency Signs": {
-            "severity": "medium",
-            "recommendation": "Review recent fertiliser schedule and consider a soil nutrient test.",
-            "prevention_steps": [
-                "Check soil pH before adding fertiliser.",
-                "Compare older and newer leaves for yellowing patterns.",
-                "Apply balanced nutrients gradually to avoid over-correction.",
-            ],
-        },
-        "Water Stress Signs": {
-            "severity": "high",
-            "recommendation": "Check soil moisture and irrigation coverage for this crop zone today.",
-            "prevention_steps": [
-                "Inspect emitters or irrigation lines for blockages.",
-                "Mulch exposed soil to reduce evaporation.",
-                "Increase monitoring during warm or windy weather.",
-            ],
-        },
-    }
-
-    confidence_ranges = {
-        "Healthy Leaf": (0.82, 0.94),
-        "Early Blight Risk": (0.74, 0.88),
-        "Powdery Mildew Risk": (0.73, 0.87),
-        "Nutrient Deficiency Signs": (0.7, 0.85),
-        "Water Stress Signs": (0.76, 0.9),
-    }
-    low, high = confidence_ranges[label]
+    selected = CROP_DIAGNOSIS_KNOWLEDGE_BASE[diagnosis_key]
+    low, high = selected["confidence_range"]
 
     return {
-        "label": label,
+        "diagnosis_key": diagnosis_key,
+        "label": selected["label"],
         "confidence": round(random.uniform(low, high), 2),
-        **guidance[label],
+        "severity": selected["severity"],
+        "recommendation": selected["recommendation"],
+        "prevention_steps": selected["prevention_steps"],
     }
 
 
 def _build_scan_advice(prediction, crop_type=None):
-    label = prediction.get("label", "Healthy Leaf")
-    severity = prediction.get("severity", "low")
-
-    advice_map = {
-        "Healthy Leaf": {
-            "possible_causes": [
-                "Current field conditions appear stable",
-                "No major disease or stress markers detected in the image",
-                "Irrigation and nutrition levels may be in a normal range",
-            ],
-            "immediate_actions": [
-                "Continue routine scouting and keep the current management plan",
-                "Record the image as a healthy baseline for later comparison",
-            ],
-            "prevention_plan": [
-                "Keep checking soil moisture and weather changes each day",
-                "Inspect for new spots, wilting, or pest pressure weekly",
-                "Repeat the scan after major weather swings or crop stress events",
-            ],
-            "monitoring_advice": "Re-scan in 5 to 7 days, or sooner if weather turns hot, wet, or windy.",
-            "when_to_seek_expert_help": "Seek expert help if symptoms spread quickly, several plants decline, or sensor data starts drifting from normal.",
-            "confidence_explanation": "The image matches a low-risk healthy-leaf pattern and does not show strong stress indicators.",
-        },
-        "Early Blight Risk": {
-            "possible_causes": [
-                "Fungal pressure from warm, humid conditions",
-                "Splashing water or wet foliage helping leaf spots spread",
-                "Nearby infected plant material or crop residue",
-            ],
-            "immediate_actions": [
-                "Remove the most affected leaves if practical",
-                "Avoid overhead watering and improve airflow around the canopy",
-                "Check neighboring plants for the same symptoms",
-            ],
-            "prevention_plan": [
-                "Rotate crops between seasons where possible",
-                "Keep foliage dry during watering and prune crowded growth",
-                "Monitor humidity and leaf wetness after rainfall or irrigation",
-            ],
-            "monitoring_advice": "Inspect the crop again within 24 to 48 hours and watch for new dark circular spots.",
-            "when_to_seek_expert_help": "Ask an agronomist or plant pathologist if the spots spread rapidly, reach fruit or stems, or appear on multiple beds.",
-            "confidence_explanation": "The model sees a symptom pattern that commonly aligns with early blight risk, so the recommendation is moderately confident.",
-        },
-        "Powdery Mildew Risk": {
-            "possible_causes": [
-                "High humidity and poor airflow around leaves",
-                "Dense canopy trapping moisture",
-                "Recent weather that favors fungal growth",
-            ],
-            "immediate_actions": [
-                "Increase spacing or prune dense foliage to improve airflow",
-                "Water near the soil line and avoid wetting leaves",
-                "Check nearby plants for white powdery patches",
-            ],
-            "prevention_plan": [
-                "Track humidity-heavy periods and act early",
-                "Keep the crop canopy open and well ventilated",
-                "Re-scan after 48 hours if the white patches grow",
-            ],
-            "monitoring_advice": "Watch the crop daily during humid weather and repeat the scan after the next irrigation cycle.",
-            "when_to_seek_expert_help": "Seek help if the white growth spreads across most leaves, affects fruiting parts, or does not slow after airflow improvements.",
-            "confidence_explanation": "Visual cues are consistent with a humidity-linked fungal pattern, but severity can vary with local weather and crop stage.",
-        },
-        "Nutrient Deficiency Signs": {
-            "possible_causes": [
-                "Soil nutrient levels may be unbalanced",
-                "Soil pH may be limiting nutrient uptake",
-                "Recent fertiliser timing or rate may need review",
-            ],
-            "immediate_actions": [
-                "Review the fertiliser schedule and recent soil amendments",
-                "Check soil pH before applying more nutrients",
-                "Compare older leaves with newer growth for yellowing patterns",
-            ],
-            "prevention_plan": [
-                "Apply balanced nutrients gradually rather than in one large correction",
-                "Keep notes on what was applied and when",
-                "Test soil periodically to catch drift before yield loss appears",
-            ],
-            "monitoring_advice": "Re-check the crop after the next feeding cycle and watch whether the yellowing improves or worsens.",
-            "when_to_seek_expert_help": "Get expert support if symptoms keep spreading, several nutrient types look affected, or the crop stops responding to feeding.",
-            "confidence_explanation": "The leaf pattern matches common deficiency cues, but confirmation usually depends on soil or tissue testing.",
-        },
-        "Water Stress Signs": {
-            "possible_causes": [
-                "Soil moisture is below the crop's preferred range",
-                "Irrigation coverage may be uneven or blocked",
-                "Hot or windy conditions could be increasing water loss",
-            ],
-            "immediate_actions": [
-                "Check soil moisture and irrigate affected zones today",
-                "Inspect emitters, hoses, or valves for blockages",
-                "Mulch exposed soil to reduce evaporation",
-            ],
-            "prevention_plan": [
-                "Track moisture more often during warm or windy weather",
-                "Confirm irrigation coverage across the full bed or block",
-                "Use trend checks to spot dry-down before plants wilt",
-            ],
-            "monitoring_advice": "Monitor moisture again within a few hours after irrigation and re-scan tomorrow if stress remains visible.",
-            "when_to_seek_expert_help": "Seek expert help if irrigation fixes do not improve the crop quickly, or if large areas wilt at the same time.",
-            "confidence_explanation": "The image shows a pattern commonly linked to water stress and the urgency is reinforced by the high-risk label.",
-        },
-    }
-
-    selected = advice_map.get(label, advice_map["Healthy Leaf"])
+    diagnosis_key = prediction.get("diagnosis_key", "healthy")
+    selected = CROP_DIAGNOSIS_KNOWLEDGE_BASE.get(
+        diagnosis_key,
+        CROP_DIAGNOSIS_KNOWLEDGE_BASE["healthy"],
+    )
     return {
-        "possible_causes": selected["possible_causes"],
+        "explanation": selected["explanation"],
+        "severity_explanation": selected["severity_explanation"],
+        "likely_causes": selected["likely_causes"],
+        "possible_causes": selected["likely_causes"],
         "immediate_actions": selected["immediate_actions"],
         "prevention_plan": selected["prevention_plan"],
         "monitoring_advice": selected["monitoring_advice"],
         "when_to_seek_expert_help": selected["when_to_seek_expert_help"],
         "confidence_explanation": selected["confidence_explanation"],
-        "advisory_disclaimer": (
-            "This AI crop scan is advisory support only. Confirm important decisions with field scouting, local conditions, "
-            "and expert agronomy advice when needed."
-        ),
+        "advisory_disclaimer": ADVISORY_DISCLAIMER,
     }
 
 
@@ -298,6 +366,7 @@ def _scan_response(scan_doc):
     timestamp = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
     farm_name = None
     farm_id = scan_doc.get("farm_id")
+    likely_causes = scan_doc.get("likely_causes") or scan_doc.get("possible_causes", [])
 
     if farm_id and ObjectId.is_valid(farm_id):
         farm = config.get_db().farms.find_one({"_id": ObjectId(farm_id)}, {"farm_name": 1})
@@ -317,7 +386,10 @@ def _scan_response(scan_doc):
         "severity": prediction.get("severity"),
         "recommendation": scan_doc.get("recommendation"),
         "prevention_steps": prediction.get("prevention_steps", []),
-        "possible_causes": scan_doc.get("possible_causes", []),
+        "explanation": scan_doc.get("explanation", ""),
+        "severity_explanation": scan_doc.get("severity_explanation", ""),
+        "likely_causes": likely_causes,
+        "possible_causes": scan_doc.get("possible_causes") or likely_causes,
         "immediate_actions": scan_doc.get("immediate_actions", []),
         "prevention_plan": scan_doc.get("prevention_plan", []),
         "monitoring_advice": scan_doc.get("monitoring_advice", ""),

@@ -83,6 +83,7 @@
           <span class="severity" [ngClass]="'severity-' + result.severity">{{ result.severity }}</span>
           <h3>{{ result.label }}</h3>
           <p>{{ result.recommendation }}</p>
+          <p>{{ result.explanation || 'The scan compares visible crop symptoms with the simulated diagnosis knowledge base.' }}</p>
         </div>
 
         <div class="metric-row">
@@ -100,7 +101,7 @@
 
         <h4>Possible causes</h4>
         <ul class="steps-list">
-          <li *ngFor="let cause of result.possible_causes || []">{{ cause }}</li>
+          <li *ngFor="let cause of result.likely_causes || result.possible_causes || []">{{ cause }}</li>
         </ul>
 
         <h4>Immediate actions</h4>
@@ -121,6 +122,9 @@
 
         <h4>Confidence explanation</h4>
         <p class="advice-copy">{{ result.confidence_explanation || 'Confidence reflects the model’s simulated assessment of the image.' }}</p>
+
+        <h4>Severity explanation</h4>
+        <p class="advice-copy">{{ result.severity_explanation || 'Severity reflects the suggested urgency of field follow-up.' }}</p>
 
         <div class="disclaimer-box">
           <strong>Advisory disclaimer</strong>

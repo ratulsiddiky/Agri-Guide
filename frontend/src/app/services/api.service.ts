@@ -170,11 +170,14 @@ export interface CropScanResponse {
     format?: string | null;
   };
   possible_causes?: string[];
+  likely_causes?: string[];
   immediate_actions?: string[];
   prevention_plan?: string[];
   monitoring_advice?: string;
   when_to_seek_expert_help?: string;
+  explanation?: string;
   confidence_explanation?: string;
+  severity_explanation?: string;
   advisory_disclaimer?: string;
   created_at?: string;
   timestamp: string;

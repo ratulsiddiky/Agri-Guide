@@ -101,9 +101,11 @@ def test_authenticated_user_can_upload_valid_crop_scan(client):
     assert payload["future_upgrade_model"] == "MobileNetV2 transfer learning CNN"
     assert payload["label"] in {
         "Healthy Leaf",
-        "Early Blight Risk",
+        "Leaf Blight Risk",
         "Powdery Mildew Risk",
+        "Rust Disease Risk",
         "Nutrient Deficiency Signs",
+        "Pest Damage Signs",
         "Water Stress Signs",
     }
     assert payload["image_metadata"]["filename"] == "healthy_leaf.png"
@@ -186,6 +188,9 @@ def test_owner_can_get_crop_scan_detail(client):
     assert payload["crop_type"] == "Tomato"
     assert payload["image_metadata"]["filename"] == "water_stress_leaf.png"
     assert payload["recommendation"]
+    assert payload["explanation"]
+    assert payload["severity_explanation"]
+    assert payload["likely_causes"]
     assert payload["possible_causes"]
     assert payload["immediate_actions"]
     assert payload["prevention_plan"]
@@ -263,6 +268,9 @@ def test_crop_scan_returns_expanded_advice_and_stores_it(client):
     assert response.status_code == 201
     payload = response.get_json()
     assert payload["severity"] == "high"
+    assert isinstance(payload["explanation"], str) and payload["explanation"]
+    assert isinstance(payload["severity_explanation"], str) and payload["severity_explanation"]
+    assert isinstance(payload["likely_causes"], list) and payload["likely_causes"]
     assert isinstance(payload["possible_causes"], list) and payload["possible_causes"]
     assert isinstance(payload["immediate_actions"], list) and payload["immediate_actions"]
     assert isinstance(payload["prevention_plan"], list) and payload["prevention_plan"]
@@ -272,11 +280,41 @@ def test_crop_scan_returns_expanded_advice_and_stores_it(client):
     assert isinstance(payload["advisory_disclaimer"], str) and payload["advisory_disclaimer"]
 
     stored_scan = config.get_db().ai_scans.find_one({"_id": ObjectId(payload["scan_id"])})
+    assert stored_scan["explanation"] == payload["explanation"]
+    assert stored_scan["severity_explanation"] == payload["severity_explanation"]
+    assert stored_scan["likely_causes"] == payload["likely_causes"]
     assert stored_scan["possible_causes"] == payload["possible_causes"]
     assert stored_scan["immediate_actions"] == payload["immediate_actions"]
     assert stored_scan["prevention_plan"] == payload["prevention_plan"]
     assert stored_scan["monitoring_advice"] == payload["monitoring_advice"]
     assert stored_scan["advisory_disclaimer"] == payload["advisory_disclaimer"]
+
+
+@pytest.mark.parametrize(
+    ("filename", "expected_label"),
+    [
+        ("healthy_leaf.png", "Healthy Leaf"),
+        ("leaf_blight_spots.png", "Leaf Blight Risk"),
+        ("powdery_mildew_white.png", "Powdery Mildew Risk"),
+        ("orange_rust_leaf.png", "Rust Disease Risk"),
+        ("yellow_nutrient_deficiency.png", "Nutrient Deficiency Signs"),
+        ("insect_pest_bite_damage.png", "Pest Damage Signs"),
+        ("dry_water_stress_leaf.png", "Water Stress Signs"),
+    ],
+)
+def test_crop_scan_keyword_diagnoses_return_richer_advice(client, filename, expected_label):
+    token = _login_token(client, username=f"user_{expected_label.split()[0].lower()}")
+
+    response = _upload_scan(client, token, filename=filename, crop_type="")
+
+    payload = response.get_json()
+    assert response.status_code == 201
+    assert payload["label"] == expected_label
+    assert payload["explanation"]
+    assert payload["severity_explanation"]
+    assert payload["likely_causes"] == payload["possible_causes"]
+    assert payload["immediate_actions"]
+    assert payload["prevention_plan"]
 
 
 def test_farm_scan_access_blocked_for_non_owner(client):
