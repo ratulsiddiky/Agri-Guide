@@ -27,16 +27,48 @@
 
       <div class="mb-3">
         <label for="cropImage" class="form-label">Crop or leaf image</label>
-        <input
-          id="cropImage"
-          class="form-control"
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          (change)="onFileSelected($event)"
-        />
-        <small class="text-muted">
-          {{ selectedFileName || 'JPG, PNG, or WebP up to 5 MB.' }}
+        <div class="image-source-row">
+          <input
+            id="cropImage"
+            class="form-control"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            (change)="onFileSelected($event)"
+          />
+          <button class="btn btn-outline-success" type="button" (click)="startCamera()" [disabled]="scanning">
+            Take Photo
+          </button>
+        </div>
+        <small class="d-block mt-1 text-muted">
+          {{ selectedImageStatus() }}
         </small>
+
+        @if (cameraError) {
+          <div class="alert alert-info py-2 mt-2 mb-0">{{ cameraError }}</div>
+        }
+
+        @if (cameraActive) {
+          <div class="camera-panel">
+            <video #cameraVideo class="camera-preview" autoplay playsinline muted></video>
+            <div class="camera-actions d-flex flex-wrap gap-2">
+              <button class="btn btn-success" type="button" (click)="capturePhoto()">Capture</button>
+              <button class="btn btn-outline-secondary" type="button" (click)="cancelCamera()">Cancel</button>
+            </div>
+          </div>
+        }
+
+        @if (capturedImagePreviewUrl) {
+          <div class="camera-panel">
+            <img class="camera-preview" [src]="capturedImagePreviewUrl" alt="Captured crop preview" />
+            <div class="camera-actions d-flex flex-wrap gap-2">
+              <button class="btn btn-outline-success" type="button" (click)="retakePhoto()">Retake</button>
+              <button class="btn btn-outline-secondary" type="button" (click)="cancelCamera()">Cancel</button>
+              <button class="btn btn-success" type="button" (click)="useCapturedPhoto()">Use Photo</button>
+            </div>
+          </div>
+        }
+
+        <canvas #captureCanvas hidden aria-hidden="true"></canvas>
       </div>
 
       <div class="mb-3">

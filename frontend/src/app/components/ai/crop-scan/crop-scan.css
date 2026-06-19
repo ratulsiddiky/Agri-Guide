@@ -80,6 +80,29 @@
   color: #14734f;
 }
 
+.image-source-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+}
+
+.image-source-row .btn {
+  flex: 0 0 auto;
+}
+
+.camera-panel {
+  margin-top: 0.85rem;
+}
+
+.camera-preview {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border: 1px solid #d7eee3;
+  border-radius: 12px;
+}
+
 .diagnosis {
   padding: 1rem;
   border: 1px solid #d7eee3;
@@ -287,6 +310,15 @@
 }
 
 @media (max-width: 640px) {
+  .image-source-row {
+    flex-direction: column;
+  }
+
+  .image-source-row .btn,
+  .camera-actions .btn {
+    width: 100%;
+  }
+
   .history-item {
     align-items: flex-start;
     flex-direction: column;
