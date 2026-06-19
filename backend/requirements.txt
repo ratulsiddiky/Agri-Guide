@@ -17,6 +17,7 @@ Jinja2==3.1.6
 limits==5.8.0
 MarkupSafe==3.0.3
 mongomock==4.3.0
+numpy
 ordered-set==4.1.0
 packaging==26.2
 pillow==12.2.0
@@ -29,6 +30,7 @@ python-dotenv==1.2.2
 pytz==2026.1.post1
 requests==2.33.1
 sentinels==1.1.1
+tensorflow-cpu
 typing_extensions==4.15.0
 urllib3==2.6.3
 Werkzeug==3.1.8

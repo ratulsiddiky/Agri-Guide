@@ -158,7 +158,7 @@ export interface CropScanResponse {
   farm_id?: string | null;
   farm_name?: string | null;
   crop_type?: string | null;
-  model_mode: 'simulated_ai';
+  model_mode: string;
   model_type: 'crop_leaf_health_classifier';
   future_upgrade_model: string;
   label: string;
@@ -187,6 +187,16 @@ export interface CropScanResponse {
   confidence_explanation?: string;
   severity_explanation?: string;
   advisory_disclaimer?: string;
+  diagnosis?: string;
+  disease_risk?: string;
+  summary?: string;
+  recommendations?: string[];
+  urgent_actions?: string[];
+  prevention_tips?: string[];
+  disclaimer?: string;
+  model?: string;
+  provider?: string;
+  ai_mode?: string;
   created_at?: string;
   timestamp: string;
 }

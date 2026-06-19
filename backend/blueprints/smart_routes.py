@@ -10,6 +10,7 @@ from werkzeug.utils import secure_filename
 
 import config
 from decorators import jwt_required
+from services import crop_disease_model
 
 try:
     from PIL import Image
@@ -465,6 +466,25 @@ def _build_scan_advice(prediction, crop_type=None):
     }
 
 
+def _crop_scan_ai_result(image_bytes, filename, crop_type):
+    if os.getenv("AI_PROVIDER", "simulated_ai").strip().lower() == "custom_model":
+        custom_result = crop_disease_model.predict_crop_disease(image_bytes)
+        if custom_result:
+            return custom_result
+
+    prediction = _simulated_crop_prediction(filename, crop_type)
+    return {
+        "prediction": prediction,
+        "advice": _build_scan_advice(prediction, crop_type),
+        "metadata": {
+            "model": "Simulated crop diagnosis knowledge base",
+            "provider": "simulated_ai",
+            "ai_mode": "simulated_ai",
+            "model_mode": "simulated_ai",
+        },
+    }
+
+
 def _scan_response(scan_doc):
     prediction = scan_doc.get("prediction", {})
     created_at = scan_doc.get("created_at") or datetime.now(timezone.utc)
@@ -483,29 +503,53 @@ def _scan_response(scan_doc):
         if farm:
             farm_name = farm.get("farm_name")
 
+    recommendation = scan_doc.get("recommendation")
+    prevention_steps = prediction.get("prevention_steps", [])
+    immediate_actions = scan_doc.get("immediate_actions", [])
+    prevention_plan = scan_doc.get("prevention_plan", [])
+    advisory_disclaimer = scan_doc.get("advisory_disclaimer", "")
+    model_mode = scan_doc.get("model_mode", "simulated_ai")
+    model = scan_doc.get("model") or (
+        "Custom crop disease classifier"
+        if model_mode == "custom_trained_model"
+        else "Simulated crop diagnosis knowledge base"
+    )
+    provider = scan_doc.get("provider") or model_mode
+    ai_mode = scan_doc.get("ai_mode") or model_mode
+
     response = {
         "scan_id": scan_id,
         "farm_id": farm_id,
         "farm_name": scan_doc.get("farm_name") or farm_name,
         "crop_type": scan_doc.get("crop_type"),
-        "model_mode": scan_doc.get("model_mode", "simulated_ai"),
+        "model_mode": model_mode,
         "model_type": "crop_leaf_health_classifier",
         "future_upgrade_model": "MobileNetV2 transfer learning CNN",
         "label": prediction.get("label"),
         "confidence": prediction.get("confidence"),
         "severity": prediction.get("severity"),
-        "recommendation": scan_doc.get("recommendation"),
-        "prevention_steps": prediction.get("prevention_steps", []),
+        "recommendation": recommendation,
+        "prevention_steps": prevention_steps,
         "explanation": scan_doc.get("explanation", ""),
         "severity_explanation": scan_doc.get("severity_explanation", ""),
         "likely_causes": likely_causes,
         "possible_causes": scan_doc.get("possible_causes") or likely_causes,
-        "immediate_actions": scan_doc.get("immediate_actions", []),
-        "prevention_plan": scan_doc.get("prevention_plan", []),
+        "immediate_actions": immediate_actions,
+        "prevention_plan": prevention_plan,
         "monitoring_advice": scan_doc.get("monitoring_advice", ""),
         "when_to_seek_expert_help": scan_doc.get("when_to_seek_expert_help", ""),
         "confidence_explanation": scan_doc.get("confidence_explanation", ""),
-        "advisory_disclaimer": scan_doc.get("advisory_disclaimer", ""),
+        "advisory_disclaimer": advisory_disclaimer,
+        "diagnosis": prediction.get("label"),
+        "disease_risk": scan_doc.get("disease_risk") or prediction.get("severity"),
+        "summary": scan_doc.get("explanation", ""),
+        "recommendations": [recommendation] if recommendation else [],
+        "urgent_actions": immediate_actions,
+        "prevention_tips": prevention_plan or prevention_steps,
+        "disclaimer": advisory_disclaimer,
+        "model": model,
+        "provider": provider,
+        "ai_mode": ai_mode,
         "latency_ms": scan_doc.get("latency_ms"),
         "image_metadata": scan_doc.get("image_metadata", {}),
         "has_image": has_image,
@@ -608,8 +652,10 @@ def crop_health_scan(current_user):
             return error_response
 
     metadata = _image_metadata(uploaded_image, image_bytes)
-    prediction = _simulated_crop_prediction(metadata["filename"], crop_type)
-    advice = _build_scan_advice(prediction, crop_type)
+    ai_result = _crop_scan_ai_result(image_bytes, metadata["filename"], crop_type)
+    prediction = ai_result["prediction"]
+    advice = ai_result["advice"]
+    ai_metadata = ai_result["metadata"]
     created_at = datetime.now(timezone.utc)
     latency_ms = round((perf_counter() - start) * 1000, 2)
     scan_doc = {
@@ -621,7 +667,7 @@ def crop_health_scan(current_user):
         "prediction": prediction,
         "recommendation": prediction["recommendation"],
         **advice,
-        "model_mode": "simulated_ai",
+        **ai_metadata,
         "latency_ms": latency_ms,
         "created_at": created_at,
     }

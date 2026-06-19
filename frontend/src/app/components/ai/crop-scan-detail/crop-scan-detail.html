@@ -91,8 +91,16 @@
           <strong>{{ imageDetails(scan) }}</strong>
         </div>
         <div class="metric-row">
-          <span>Model mode</span>
-          <strong>{{ scan.model_mode }}</strong>
+          <span>Model</span>
+          <strong>{{ scan.model || scan.model_mode }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>Provider</span>
+          <strong>{{ scan.provider || scan.model_mode }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>Mode</span>
+          <strong>{{ scan.ai_mode || scan.model_mode }}</strong>
         </div>
         <div class="metric-row">
           <span>Future model</span>
@@ -159,7 +167,7 @@
 
       <div class="disclaimer-box">
         <strong>Advisory disclaimer</strong>
-        <p>{{ scan.advisory_disclaimer || 'This advice is informational only and should be confirmed with field checks.' }}</p>
+        <p>{{ scan.disclaimer || scan.advisory_disclaimer || 'AI-assisted diagnosis. Please verify serious crop disease decisions with an agricultural expert.' }}</p>
       </div>
     </section>
   }

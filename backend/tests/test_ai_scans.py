@@ -67,6 +67,10 @@ def client(monkeypatch):
     monkeypatch.setattr(config, "get_mongo_client", lambda: mock_client)
     monkeypatch.setattr(config, "get_db", lambda: mock_db)
     monkeypatch.setenv("AI_SCAN_IMAGE_STORAGE_ENABLED", "false")
+    monkeypatch.delenv("AI_PROVIDER", raising=False)
+    monkeypatch.delenv("CROP_MODEL_PATH", raising=False)
+    monkeypatch.delenv("CROP_LABELS_PATH", raising=False)
+    monkeypatch.delenv("CROP_MODEL_CONFIDENCE_THRESHOLD", raising=False)
     monkeypatch.delenv("AZURE_STORAGE_CONNECTION_STRING", raising=False)
     monkeypatch.delenv("AZURE_STORAGE_CONTAINER_NAME", raising=False)
     _FakeContainerClient.blobs = {}
@@ -226,6 +230,125 @@ def test_crop_scan_upload_failure_keeps_metadata_only_scan(client, monkeypatch):
     assert "image_endpoint" not in payload
     stored_scan = config.get_db().ai_scans.find_one({"_id": ObjectId(payload["scan_id"])})
     assert "image_blob_name" not in stored_scan
+
+
+def test_crop_scan_uses_simulated_ai_when_provider_is_not_custom(client, monkeypatch):
+    def fail_if_called(_image_bytes):
+        raise AssertionError("custom model service should not be called")
+
+    monkeypatch.setenv("AI_PROVIDER", "simulated_ai")
+    monkeypatch.setattr(smart_routes.crop_disease_model, "predict_crop_disease", fail_if_called)
+    token = _login_token(client)
+
+    response = _upload_scan(client, token, filename="healthy_leaf.png")
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["model_mode"] == "simulated_ai"
+    assert payload["provider"] == "simulated_ai"
+    assert payload["ai_mode"] == "simulated_ai"
+
+
+def test_crop_scan_falls_back_when_custom_model_artifacts_missing(client, monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "custom_model")
+    monkeypatch.setenv("CROP_MODEL_PATH", "backend/ml_models/missing-model.keras")
+    monkeypatch.setenv("CROP_LABELS_PATH", "backend/ml_models/missing-labels.json")
+    token = _login_token(client)
+
+    response = _upload_scan(client, token, filename="healthy_leaf.png")
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["model_mode"] == "simulated_ai"
+    assert payload["provider"] == "simulated_ai"
+    assert payload["label"] in {
+        "Healthy Leaf",
+        "Leaf Blight Risk",
+        "Powdery Mildew Risk",
+        "Rust Disease Risk",
+        "Nutrient Deficiency Signs",
+        "Pest Damage Signs",
+        "Water Stress Signs",
+    }
+
+
+def test_crop_scan_custom_model_prediction_maps_to_response_shape(client, monkeypatch):
+    custom_result = {
+        "prediction": {
+            "diagnosis_key": "Tomato_Early_blight",
+            "label": "Tomato early blight",
+            "confidence": 0.968,
+            "severity": "medium",
+            "recommendation": "Remove affected lower leaves and improve airflow.",
+            "prevention_steps": ["Mulch soil.", "Avoid overhead watering."],
+            "raw_label": "Tomato_Early_blight",
+        },
+        "advice": {
+            "explanation": "The image is most consistent with tomato early blight.",
+            "severity_explanation": "Medium severity reflects field follow-up urgency.",
+            "likely_causes": ["Warm humid conditions"],
+            "possible_causes": ["Warm humid conditions"],
+            "immediate_actions": ["Inspect lower leaves"],
+            "prevention_plan": ["Mulch soil.", "Avoid overhead watering."],
+            "monitoring_advice": "Scout again within 48 hours.",
+            "when_to_seek_expert_help": "Seek expert help if symptoms spread.",
+            "confidence_explanation": "Confidence is the trained model probability.",
+            "advisory_disclaimer": "AI-assisted diagnosis. Please verify serious crop disease decisions with an agricultural expert.",
+            "disease_risk": "medium",
+        },
+        "metadata": {
+            "model": "Custom crop disease classifier",
+            "provider": "Agri Guide trained model",
+            "ai_mode": "custom_trained_model",
+            "model_mode": "custom_trained_model",
+        },
+    }
+    monkeypatch.setenv("AI_PROVIDER", "custom_model")
+    monkeypatch.setattr(
+        smart_routes.crop_disease_model,
+        "predict_crop_disease",
+        lambda _image_bytes: custom_result,
+    )
+    token = _login_token(client)
+
+    response = _upload_scan(client, token, filename="tomato_leaf.png")
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["label"] == "Tomato early blight"
+    assert payload["diagnosis"] == "Tomato early blight"
+    assert payload["disease_risk"] == "medium"
+    assert payload["severity"] == "medium"
+    assert payload["confidence"] == 0.968
+    assert payload["model"] == "Custom crop disease classifier"
+    assert payload["provider"] == "Agri Guide trained model"
+    assert payload["ai_mode"] == "custom_trained_model"
+    assert payload["model_mode"] == "custom_trained_model"
+    assert payload["summary"] == "The image is most consistent with tomato early blight."
+    assert payload["recommendations"] == ["Remove affected lower leaves and improve airflow."]
+    assert payload["urgent_actions"] == ["Inspect lower leaves"]
+    assert payload["prevention_tips"] == ["Mulch soil.", "Avoid overhead watering."]
+    assert "backend/ml_models" not in str(payload)
+
+
+def test_crop_scan_low_custom_model_confidence_is_handled_safely(client, monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "custom_model")
+    monkeypatch.setattr(
+        smart_routes.crop_disease_model,
+        "predict_crop_disease",
+        lambda _image_bytes: smart_routes.crop_disease_model._uncertain_result(0.42),
+    )
+    token = _login_token(client)
+
+    response = _upload_scan(client, token, filename="uncertain_leaf.png")
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["model_mode"] == "custom_trained_model"
+    assert payload["label"] == "Uncertain crop disease diagnosis"
+    assert payload["confidence"] == 0.42
+    assert "Retake the photo" in payload["recommendation"]
+    assert payload["urgent_actions"]
 
 
 def test_crop_scan_missing_image_returns_400(client):

@@ -3,7 +3,7 @@
     <div>
       <p class="eyebrow">AI Crop Scan</p>
       <h1>Crop health image scan</h1>
-      <p>Upload a crop or leaf image to get a simulated diagnosis, confidence score, and practical next steps.</p>
+      <p>Upload a crop or leaf image to get an AI-assisted diagnosis, confidence score, and practical next steps.</p>
     </div>
     <a routerLink="/farms" class="btn btn-outline-success btn-sm">Back to farms</a>
   </section>
@@ -141,7 +141,15 @@
         </div>
         <div class="metric-row">
           <span>Model</span>
-          <strong>{{ result.model_mode }}</strong>
+          <strong>{{ result.model || result.model_mode }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>Provider</span>
+          <strong>{{ result.provider || result.model_mode }}</strong>
+        </div>
+        <div class="metric-row">
+          <span>Mode</span>
+          <strong>{{ result.ai_mode || result.model_mode }}</strong>
         </div>
 
         <h4>Possible causes</h4>
@@ -173,7 +181,7 @@
 
         <div class="disclaimer-box">
           <strong>Advisory disclaimer</strong>
-          <p>{{ result.advisory_disclaimer || 'This advice is informational only and should be confirmed with field checks.' }}</p>
+          <p>{{ result.disclaimer || result.advisory_disclaimer || 'AI-assisted diagnosis. Please verify serious crop disease decisions with an agricultural expert.' }}</p>
         </div>
 
         <small class="text-muted">
