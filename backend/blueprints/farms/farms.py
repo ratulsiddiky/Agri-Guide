@@ -305,11 +305,18 @@ def _to_float(value):
         return None
 
 
+def _exact_location_source(farm):
+    source = farm.get("location_source")
+    if source in {"browser_geolocation", "manual_coordinates"}:
+        return source
+    return "manual_coordinates"
+
+
 def _farm_coordinates(farm):
     latitude = _to_float(farm.get("latitude"))
     longitude = _to_float(farm.get("longitude"))
     if latitude is not None and longitude is not None:
-        return latitude, longitude, "stored_coordinates"
+        return latitude, longitude, _exact_location_source(farm)
 
     location = farm.get("location")
     if isinstance(location, dict):
@@ -318,7 +325,7 @@ def _farm_coordinates(farm):
             longitude = _to_float(coordinates[0])
             latitude = _to_float(coordinates[1])
             if latitude is not None and longitude is not None:
-                return latitude, longitude, "stored_coordinates"
+                return latitude, longitude, _exact_location_source(farm)
 
     area_name = str(farm.get("address", {}).get("area_name", "")).lower()
     if "london" in area_name:
@@ -837,11 +844,7 @@ def sync_weather(current_user, farm_id):
     if error_response:
         return error_response
 
-    coordinates = farm.get("location", {}).get("coordinates", [])
-    if len(coordinates) != 2:
-        return make_response(jsonify({"message": "Farm location is incomplete."}), 400)
-
-    lng, lat = coordinates
+    lat, lng, location_source = _farm_coordinates(farm)
     weather_url = (
         "https://api.open-meteo.com/v1/forecast"
         f"?latitude={lat}&longitude={lng}&current_weather=true"
@@ -864,6 +867,7 @@ def sync_weather(current_user, farm_id):
         "temperature_celsius": current_weather.get("temperature"),
         "windspeed": current_weather.get("windspeed"),
         "conditions": "Synced from Open-Meteo API",
+        "location_source": location_source,
     }
 
     _farms_collection().update_one({"_id": ObjectId(farm_id)}, {"$push": {"weather_logs": new_log}})

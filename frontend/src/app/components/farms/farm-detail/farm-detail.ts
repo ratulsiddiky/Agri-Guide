@@ -337,12 +337,18 @@ export class FarmDetail implements OnInit, AfterViewInit, OnDestroy {
     }
 
     if (this.farmWeather.data_source === 'fallback_simulated_weather') {
-      return 'Fallback simulated weather';
+      return this.isApproximateWeatherLocation
+        ? 'Fallback simulated weather using approximate demo coordinates'
+        : 'Fallback simulated weather using exact farm coordinates';
     }
 
-    return this.farmWeather.location_source === 'approximate_demo_location'
+    return this.isApproximateWeatherLocation
       ? 'Open-Meteo using approximate demo coordinates'
-      : 'Open-Meteo live weather';
+      : 'Open-Meteo using exact farm coordinates';
+  }
+
+  get isApproximateWeatherLocation(): boolean {
+    return this.farmWeather?.location_source === 'approximate_demo_location';
   }
 
   private scheduleChartRender(): void {

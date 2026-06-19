@@ -38,7 +38,7 @@ describe('FarmDetail', () => {
           farm_name: 'North Field',
           latitude: 54.5973,
           longitude: -5.9301,
-          location_source: 'stored_coordinates',
+          location_source: 'manual_coordinates',
           temperature_c: 18,
           humidity_percent: 70,
           wind_speed_kmh: 12,

@@ -19,7 +19,12 @@ describe('FarmForm', () => {
           _id: 'farm-1',
           farm_name: 'North Field',
           crop_type: 'Wheat',
-          address: { area_name: 'Belfast' },
+          region: 'Belfast',
+          postcode: 'BT1 1AA',
+          address: { area_name: 'Belfast', postcode: 'BT1 1AA' },
+          latitude: 54.5973,
+          longitude: -5.9301,
+          location_source: 'manual_coordinates',
         } as never),
       createFarm: () => of({ message: 'Created', farm_id: 'new-farm' }),
       updateFarm: () => {
@@ -58,7 +63,14 @@ describe('FarmForm', () => {
     component.farmForm.setValue({
       farm_name: 'Updated Farm',
       crop_type: 'Corn',
-      area_name: 'Antrim',
+      address_line: '12 Field Lane',
+      city: 'Belfast',
+      region: 'Antrim',
+      postcode: 'BT1 1AA',
+      country: 'United Kingdom',
+      latitude: '54.5973',
+      longitude: '-5.9301',
+      location_source: 'manual_coordinates',
     });
 
     component.onSubmit();

@@ -56,18 +56,126 @@
             }
           </div>
 
-          <div class="mb-4">
-            <label for="area_name" class="form-label fw-semibold">Area Name</label>
-            <input
-              id="area_name"
-              type="text"
-              class="form-control"
-              formControlName="area_name"
-              placeholder="e.g. County Antrim"
-            />
-            @if (farmForm.controls.area_name.touched && farmForm.controls.area_name.invalid) {
-              <div class="text-danger small mt-1">Area name is required.</div>
+          <div class="location-section border rounded p-3 mb-4">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+              <div>
+                <h5 class="mb-1">Location</h5>
+                <p class="text-muted small mb-0">Add exact coordinates for more accurate weather.</p>
+              </div>
+              <button
+                type="button"
+                class="btn btn-outline-success btn-sm"
+                (click)="useCurrentLocation()"
+                [disabled]="geolocationLoading || submitting">
+                @if (geolocationLoading) {
+                  <span class="spinner-border spinner-border-sm me-1"></span>
+                  Locating...
+                } @else {
+                  Use my current location
+                }
+              </button>
+            </div>
+
+            @if (locationMessage) {
+              <div
+                class="alert py-2 small"
+                [class.alert-success]="locationMessageType === 'success'"
+                [class.alert-danger]="locationMessageType === 'danger'"
+                [class.alert-info]="locationMessageType === 'info'">
+                {{ locationMessage }}
+              </div>
             }
+
+            <h6 class="text-success mb-2">Manual address</h6>
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label for="address_line" class="form-label fw-semibold">Address Line</label>
+                <input
+                  id="address_line"
+                  type="text"
+                  class="form-control"
+                  formControlName="address_line"
+                  placeholder="e.g. 12 Field Lane"
+                  (input)="onManualAddressInput()"
+                />
+              </div>
+              <div class="col-md-6">
+                <label for="city" class="form-label fw-semibold">City</label>
+                <input
+                  id="city"
+                  type="text"
+                  class="form-control"
+                  formControlName="city"
+                  placeholder="e.g. Belfast"
+                  (input)="onManualAddressInput()"
+                />
+              </div>
+              <div class="col-md-4">
+                <label for="region" class="form-label fw-semibold">County / Region</label>
+                <input
+                  id="region"
+                  type="text"
+                  class="form-control"
+                  formControlName="region"
+                  placeholder="e.g. County Antrim"
+                  (input)="onManualAddressInput()"
+                />
+              </div>
+              <div class="col-md-4">
+                <label for="postcode" class="form-label fw-semibold">Postcode</label>
+                <input
+                  id="postcode"
+                  type="text"
+                  class="form-control"
+                  formControlName="postcode"
+                  placeholder="e.g. BT1 1AA"
+                  (input)="onManualAddressInput()"
+                />
+              </div>
+              <div class="col-md-4">
+                <label for="country" class="form-label fw-semibold">Country</label>
+                <input
+                  id="country"
+                  type="text"
+                  class="form-control"
+                  formControlName="country"
+                  placeholder="e.g. United Kingdom"
+                  (input)="onManualAddressInput()"
+                />
+              </div>
+            </div>
+
+            <h6 class="text-success mb-2">Exact coordinates</h6>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label for="latitude" class="form-label fw-semibold">Latitude</label>
+                <input
+                  id="latitude"
+                  type="number"
+                  step="any"
+                  min="-90"
+                  max="90"
+                  class="form-control"
+                  formControlName="latitude"
+                  placeholder="e.g. 54.5973"
+                  (input)="onManualCoordinateInput()"
+                />
+              </div>
+              <div class="col-md-6">
+                <label for="longitude" class="form-label fw-semibold">Longitude</label>
+                <input
+                  id="longitude"
+                  type="number"
+                  step="any"
+                  min="-180"
+                  max="180"
+                  class="form-control"
+                  formControlName="longitude"
+                  placeholder="e.g. -5.9301"
+                  (input)="onManualCoordinateInput()"
+                />
+              </div>
+            </div>
           </div>
 
           <button type="submit" class="btn btn-success" [disabled]="submitting">

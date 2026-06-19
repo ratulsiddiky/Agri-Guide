@@ -119,6 +119,79 @@ def test_sync_weather(client, monkeypatch):
     assert payload["message"] == "Weather synced!"
     assert payload["new_log"]["temperature_celsius"] == 24.6
     assert payload["new_log"]["windspeed"] == 12.3
+    assert payload["new_log"]["location_source"] == "manual_coordinates"
+
+
+def test_sync_weather_without_exact_coordinates_uses_fallback(client, monkeypatch):
+    token = _login_token(client)
+    owner = config.get_db().users.find_one({"username": "farmer_one"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {
+                "farm_name": "Fallback Weather Farm",
+                "owner_id": owner["_id"],
+                "address": {"area_name": "County Antrim"},
+                "sensors": [],
+                "weather_logs": [],
+                "alerts_history": [],
+            }
+        ).inserted_id
+    )
+
+    class _FakeWeatherResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "current_weather": {
+                    "temperature": 18.2,
+                    "windspeed": 8.5,
+                }
+            }
+
+    weather_calls = []
+
+    def _fake_weather_get(url, *args, **kwargs):
+        weather_calls.append(url)
+        return _FakeWeatherResponse()
+
+    monkeypatch.setattr(farms_routes.requests, "get", _fake_weather_get)
+
+    response = client.post(
+        f"/api/farms/{farm_id}/sync_weather",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["new_log"]["temperature_celsius"] == 18.2
+    assert payload["new_log"]["location_source"] == "approximate_demo_location"
+    assert "latitude=54.5973" in weather_calls[0]
+    assert "longitude=-5.9301" in weather_calls[0]
+
+
+def test_farm_coordinates_prefers_top_level_exact_coordinates():
+    farm = {
+        "latitude": 10.5,
+        "longitude": 20.25,
+        "location": {"type": "Point", "coordinates": [99, 88]},
+        "location_source": "browser_geolocation",
+    }
+
+    assert farms_routes._farm_coordinates(farm) == (10.5, 20.25, "browser_geolocation")
+
+
+def test_farm_coordinates_reads_geojson_for_legacy_farms():
+    farm = {"location": {"type": "Point", "coordinates": [-0.1276, 51.5072]}}
+
+    assert farms_routes._farm_coordinates(farm) == (51.5072, -0.1276, "manual_coordinates")
+
+
+def test_farm_coordinates_fallback_still_works_for_old_farms():
+    farm = {"farm_name": "Old Farm", "address": {"area_name": "County Antrim"}}
+
+    assert farms_routes._farm_coordinates(farm) == (54.5973, -5.9301, "approximate_demo_location")
 
 
 def test_get_farm_insights(client):
@@ -474,7 +547,7 @@ def test_farm_weather_endpoint_works_for_owner(client, monkeypatch):
     assert payload["farm_name"] == "Weather Detail Farm"
     assert payload["latitude"] == 54.5973
     assert payload["longitude"] == -5.9301
-    assert payload["location_source"] == "stored_coordinates"
+    assert payload["location_source"] == "manual_coordinates"
     assert payload["temperature_c"] == 18.7
     assert payload["humidity_percent"] == 72
     assert payload["wind_speed_kmh"] == 14.2

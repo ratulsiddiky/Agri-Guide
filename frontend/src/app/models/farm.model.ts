@@ -10,6 +10,12 @@ export interface FarmAddress {
   [key: string]: unknown;
 }
 
+export type FarmLocationSource =
+  | 'browser_geolocation'
+  | 'manual_coordinates'
+  | 'manual_address'
+  | 'approximate_demo_location';
+
 export interface FarmGeoLocation {
   type?: string;
   coordinates?: number[];
@@ -51,6 +57,12 @@ export interface Farm {
   created_at?: string;
   latitude?: number;
   longitude?: number;
+  location_source?: FarmLocationSource;
+  address_line?: string;
+  city?: string;
+  region?: string;
+  postcode?: string;
+  country?: string;
   weather?: unknown;
   address?: FarmAddress;
   alerts_history?: FarmAlert[];

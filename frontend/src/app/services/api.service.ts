@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../../environments/environment';
-import { Farm, FarmSensor } from '../models/farm.model';
+import { Farm, FarmLocationSource, FarmSensor } from '../models/farm.model';
 
 export interface FarmPagination {
   page: number;
@@ -99,7 +99,7 @@ export interface FarmWeatherResponse {
   farm_name: string;
   latitude: number;
   longitude: number;
-  location_source: 'stored_coordinates' | 'approximate_demo_location';
+  location_source: FarmLocationSource;
   temperature_c: number | null;
   humidity_percent: number | null;
   wind_speed_kmh: number | null;

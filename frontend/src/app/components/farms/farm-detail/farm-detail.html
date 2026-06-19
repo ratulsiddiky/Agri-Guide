@@ -201,8 +201,15 @@
               </div>
 
               <p class="text-muted small mb-1">{{ weatherSourceLabel }}</p>
-              @if (farmWeather.location_source === 'approximate_demo_location') {
-                <p class="text-warning small fw-semibold mb-1">Using approximate demo coordinates.</p>
+              @if (isApproximateWeatherLocation) {
+                <p class="text-warning small fw-semibold mb-1">
+                  Using approximate demo coordinates.
+                  <a [routerLink]="['/farms', farm._id, 'edit']" class="link-warning">
+                    Edit farm location for accurate weather.
+                  </a>
+                </p>
+              } @else {
+                <p class="text-success small fw-semibold mb-1">Using exact farm coordinates.</p>
               }
               @if (farmWeather.data_source === 'fallback_simulated_weather') {
                 <p class="text-warning small fw-semibold mb-1">Open-Meteo was unavailable; showing safe fallback data.</p>

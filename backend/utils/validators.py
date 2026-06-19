@@ -65,7 +65,7 @@ def validate_farm_input(data):
     errors = {}
     
     
-    if not is_non_empty_string(data.get('farm_name')):
+    if 'farm_name' in data and not is_non_empty_string(data.get('farm_name')):
         errors['farm_name'] = "Farm name cannot be empty."
     
     
