@@ -63,6 +63,7 @@ export class FarmForm implements OnInit, OnDestroy {
   isEditMode = false;
   farmId = '';
   loading = false;
+  loadError = false;
   submitting = false;
   errorMessage = '';
   successMessage = '';
@@ -98,6 +99,7 @@ export class FarmForm implements OnInit, OnDestroy {
 
   loadFarmForEdit(): void {
     this.loading = true;
+    this.loadError = false;
     this.errorMessage = '';
     this.farmForm.disable();
     this.cdr.markForCheck();
@@ -120,6 +122,7 @@ export class FarmForm implements OnInit, OnDestroy {
             location_source: farm.location_source || '',
           });
           this.loading = false;
+          this.loadError = false;
           this.farmForm.enable();
           this.cdr.markForCheck();
         },
@@ -128,6 +131,7 @@ export class FarmForm implements OnInit, OnDestroy {
             this.apiService.getErrorMessage(err) ||
             `Unable to load farm '${this.farmId}' for editing. Please refresh and try again.`;
           this.loading = false;
+          this.loadError = true;
           this.farmForm.enable();
           this.cdr.markForCheck();
         },

@@ -85,6 +85,7 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.showMyFarms = !this.isAdmin;
     this.loadFarms();
     this.loadMapFarms();
   }
@@ -106,6 +107,11 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
   }
 
   toggleMyFarms(): void {
+    if (!this.isAdmin) {
+      this.showMyFarms = true;
+      return;
+    }
+
     this.showMyFarms = !this.showMyFarms;
     this.query = '';
     this.loadFarms(1);
@@ -119,7 +125,11 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
     this.page = page;
     this.cdr.markForCheck();
 
-    const request = this.showMyFarms
+    if (!this.isAdmin) {
+      this.showMyFarms = true;
+    }
+
+    const request = this.showMyFarms || !this.isAdmin
       ? this.farmService.getMyFarms(this.page, this.pageSize)
       : this.farmService.getFarms(this.page, this.pageSize);
 
@@ -165,9 +175,10 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
       .subscribe({
         next: (data) => {
           this.page = 1;
-          this.totalFarms = data.length;
+          const visibleFarms = this.showMyFarms ? data.filter((farm) => this.isCurrentUserOwner(farm)) : data;
+          this.totalFarms = visibleFarms.length;
           this.hasNext = false;
-          this.farms = this.sortFarms(data);
+          this.farms = this.sortFarms(visibleFarms);
           this.loading = false;
           this.cdr.markForCheck();
         },
@@ -372,6 +383,26 @@ export class FarmsList implements OnInit, AfterViewInit, OnDestroy {
         </a>
       </div>
     `;
+  }
+
+
+  get isAdmin(): boolean {
+    return this.authService.currentUserSignal()?.role === 'admin';
+  }
+
+
+  get farmsPageTitle(): string {
+    if (!this.isAdmin) {
+      return 'My Farms';
+    }
+
+    return this.showMyFarms ? 'My Farms' : 'All Farms';
+  }
+
+
+  isCurrentUserOwner(farm: Farm): boolean {
+    const currentUserId = this.authService.currentUserSignal()?._id || this.authService.currentUserSignal()?.user_id || '';
+    return Boolean(currentUserId && String(farm.owner_id || '') === String(currentUserId));
   }
 
 

@@ -122,7 +122,7 @@ export class FarmDetail implements OnInit, AfterViewInit, OnDestroy {
     if (!this.farmId || this.farmId === 'undefined') {
       this.error = true;
       this.errorMessage =
-        'The farm identifier is missing or invalid. Please return to All Farms and try again.';
+        'The farm identifier is missing or invalid. Please return to Farms and try again.';
       this.loading = false;
       this.cdr.markForCheck(); 
       return;

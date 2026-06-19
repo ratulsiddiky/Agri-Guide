@@ -29,6 +29,17 @@ def _farms_collection():
     return config.get_db().farms
 
 
+def _owner_match_query(current_user):
+    user_id = current_user["_id"]
+    return {"owner_id": {"$in": [user_id, str(user_id)]}}
+
+
+def _farm_visibility_query(current_user):
+    if current_user.get("role") == "admin":
+        return {}
+    return _owner_match_query(current_user)
+
+
 def _sensor_value(sensor_type):
     ranges = {
         "soil_moisture": (45, 70, "%"),
@@ -546,7 +557,8 @@ def get_farm_if_authorised(farm_id, current_user):
 
 @farms_bp.route("/api/farms", methods=["GET"])
 @limiter.limit("60 per minute")
-def get_all_farms():
+@jwt_required
+def get_all_farms(current_user):
     page_raw = request.args.get("page", "1")
     limit_raw = request.args.get("limit", "20")
     try:
@@ -559,9 +571,10 @@ def get_all_farms():
         )
 
     skip = (page - 1) * limit
+    query = _farm_visibility_query(current_user)
     try:
-        total = _farms_collection().count_documents({})
-        cursor = _farms_collection().find({}).skip(skip).limit(limit)
+        total = _farms_collection().count_documents(query)
+        cursor = _farms_collection().find(query).skip(skip).limit(limit)
         farms_list = [serialize_document(farm) for farm in cursor]
     except PyMongoError as exc:
         return _error_response(
@@ -587,13 +600,11 @@ def get_all_farms():
 
 
 @farms_bp.route("/api/farms/<farm_id>", methods=["GET"])
-def get_single_farm(farm_id):
-    if not ObjectId.is_valid(farm_id):
-        return _error_response("Invalid ID format", 400)
-
-    farm = _farms_collection().find_one({"_id": ObjectId(farm_id)})
-    if not farm:
-        return _error_response("Farm not found", 404)
+@jwt_required
+def get_single_farm(current_user, farm_id):
+    farm, error_response = get_farm_if_authorised(farm_id, current_user)
+    if error_response:
+        return error_response
 
     return make_response(jsonify(serialize_document(farm)), 200)
 
@@ -634,7 +645,7 @@ def create_farm(current_user):
     )
 
 
-@farms_bp.route("/api/farms/<farm_id>", methods=["PUT"])
+@farms_bp.route("/api/farms/<farm_id>", methods=["PUT", "PATCH"])
 @jwt_required
 def update_farm(current_user, farm_id):
     farm, error_response = get_farm_if_authorised(farm_id, current_user)  
@@ -806,7 +817,7 @@ def get_my_farms(current_user):
         )
 
     skip = (page - 1) * limit
-    query = {"owner_id": current_user["_id"]}
+    query = _owner_match_query(current_user)
     try:
         total = _farms_collection().count_documents(query)
         cursor = _farms_collection().find(query).skip(skip).limit(limit)
@@ -836,7 +847,8 @@ def get_my_farms(current_user):
 
 @farms_bp.route("/api/farms/search", methods=["GET"])
 @limiter.limit("30 per minute")
-def search_farms():
+@jwt_required
+def search_farms(current_user):
     search_term = request.args.get("q", "").strip()
     if not search_term:
         return _error_response(
@@ -859,11 +871,12 @@ def search_farms():
     
     # ✅ UPDATED: Search in farm_name, crop_type, and address.area_name
     search_query = {
+        **_farm_visibility_query(current_user),
         "$or": [
             {"farm_name": {"$regex": search_term, "$options": "i"}},
             {"crop_type": {"$regex": search_term, "$options": "i"}},
             {"address.area_name": {"$regex": search_term, "$options": "i"}}
-        ]
+        ],
     }
 
     try:
@@ -1185,7 +1198,7 @@ def get_action_plan(current_user, farm_id):
 @farms_bp.route("/api/dashboard/summary", methods=["GET"])
 @jwt_required
 def get_dashboard_summary(current_user):
-    query = {"owner_id": current_user["_id"]}
+    query = _owner_match_query(current_user)
     try:
         farms = list(_farms_collection().find(query))
     except PyMongoError as exc:

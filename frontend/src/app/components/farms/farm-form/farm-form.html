@@ -24,7 +24,7 @@
     </div>
   }
 
-  @if (!loading) {
+  @if (!loading && !loadError) {
     <div class="card shadow-sm border-success">
       <div class="card-body p-4">
         <form [formGroup]="farmForm" (ngSubmit)="onSubmit()" novalidate>

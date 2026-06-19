@@ -45,38 +45,60 @@ def _login_token(client, username="farmer_one", password="Password123!", role="u
     return response.get_json()["token"]
 
 
-def test_search_farms(client, monkeypatch):
-    expected_farm_id = ObjectId()
-    expected_doc = {
-        "_id": expected_farm_id,
-        "farm_name": "North Field",
-        "crop_type": "Wheat",
-    }
+def test_search_farms_only_returns_current_user_matches(client):
+    farmer_token = _login_token(client, username="farmer_one")
+    _login_token(client, username="farmer_two")
+    farmer = config.get_db().users.find_one({"username": "farmer_one"})
+    other = config.get_db().users.find_one({"username": "farmer_two"})
 
-    class _FakeFarmsCollection:
-        def count_documents(self, query):
-            return 1 if "north" in str(query).lower() else 0
-        
-        def find(self, query):
-            self.data = [expected_doc] if "north" in str(query).lower() else []
-            return self
-        
-        def skip(self, n):
-            return self
-        
-        def limit(self, n):
-            return self.data
+    config.get_db().farms.insert_many(
+        [
+            {"farm_name": "North Field", "owner_id": farmer["_id"], "crop_type": "Wheat"},
+            {"farm_name": "North Other", "owner_id": other["_id"], "crop_type": "Wheat"},
+            {"farm_name": "South Field", "owner_id": farmer["_id"], "crop_type": "Corn"},
+        ]
+    )
 
-    monkeypatch.setattr(farms_routes, "_farms_collection", lambda: _FakeFarmsCollection())
-
-    response = client.get("/api/farms/search?q=north")
+    response = client.get(
+        "/api/farms/search?q=north",
+        headers={"Authorization": f"Bearer {farmer_token}"},
+    )
 
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["results_count"] == 1
     assert payload["total"] == 1
     assert payload["data"][0]["farm_name"] == "North Field"
-    assert payload["data"][0]["_id"] == str(expected_farm_id)
+
+
+def test_admin_search_farms_returns_all_matches(client):
+    admin_token = _login_token(client, username="admin_user", role="admin")
+    _login_token(client, username="farmer_one")
+    admin = config.get_db().users.find_one({"username": "admin_user"})
+    farmer = config.get_db().users.find_one({"username": "farmer_one"})
+
+    config.get_db().farms.insert_many(
+        [
+            {"farm_name": "North Admin", "owner_id": admin["_id"], "crop_type": "Wheat"},
+            {"farm_name": "North Farmer", "owner_id": farmer["_id"], "crop_type": "Wheat"},
+        ]
+    )
+
+    response = client.get(
+        "/api/farms/search?q=north",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["results_count"] == 2
+    assert {farm["farm_name"] for farm in payload["data"]} == {"North Admin", "North Farmer"}
+
+
+def test_search_farms_requires_authentication(client):
+    response = client.get("/api/farms/search?q=north")
+
+    assert response.status_code == 401
 
 
 def test_sync_weather(client, monkeypatch):
@@ -169,6 +191,90 @@ def test_sync_weather_without_exact_coordinates_uses_fallback(client, monkeypatc
     assert payload["new_log"]["location_source"] == "approximate_demo_location"
     assert "latitude=54.5973" in weather_calls[0]
     assert "longitude=-5.9301" in weather_calls[0]
+
+
+def test_sync_weather_blocks_other_users(client):
+    _login_token(client, username="owner_user")
+    intruder_token = _login_token(client, username="intruder_user")
+    owner = config.get_db().users.find_one({"username": "owner_user"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {
+                "farm_name": "Private Sync Farm",
+                "owner_id": owner["_id"],
+                "location": {"type": "Point", "coordinates": [-5.93, 54.6]},
+                "sensors": [],
+                "weather_logs": [],
+                "alerts_history": [],
+            }
+        ).inserted_id
+    )
+
+    response = client.post(
+        f"/api/farms/{farm_id}/sync_weather",
+        headers={"Authorization": f"Bearer {intruder_token}"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_add_sensor_blocks_other_users(client):
+    _login_token(client, username="owner_user")
+    intruder_token = _login_token(client, username="intruder_user")
+    owner = config.get_db().users.find_one({"username": "owner_user"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {
+                "farm_name": "Private Sensor Add Farm",
+                "owner_id": owner["_id"],
+                "sensors": [],
+                "weather_logs": [],
+                "alerts_history": [],
+            }
+        ).inserted_id
+    )
+
+    response = client.post(
+        f"/api/farms/{farm_id}/sensors",
+        json={"sensor_id": "soil-1", "type": "soil_moisture"},
+        headers={"Authorization": f"Bearer {intruder_token}"},
+    )
+
+    assert response.status_code == 403
+    farm = config.get_db().farms.find_one({"_id": ObjectId(farm_id)})
+    assert farm["sensors"] == []
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "insights",
+        "irrigation_check",
+        "sensor-history",
+    ],
+)
+def test_farm_read_subroutes_block_other_users(client, endpoint):
+    _login_token(client, username="owner_user")
+    intruder_token = _login_token(client, username="intruder_user")
+    owner = config.get_db().users.find_one({"username": "owner_user"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {
+                "farm_name": "Private Read Farm",
+                "owner_id": owner["_id"],
+                "sensors": [{"sensor_id": "soil-1", "type": "soil_moisture", "readings": [{"value": 50}]}],
+                "weather_logs": [{"temperature_celsius": 20.0, "windspeed": 5.0}],
+                "alerts_history": [],
+            }
+        ).inserted_id
+    )
+
+    response = client.get(
+        f"/api/farms/{farm_id}/{endpoint}",
+        headers={"Authorization": f"Bearer {intruder_token}"},
+    )
+
+    assert response.status_code == 403
 
 
 def test_farm_coordinates_prefers_top_level_exact_coordinates():

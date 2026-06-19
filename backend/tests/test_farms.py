@@ -51,6 +51,7 @@ def test_create_farm_requires_authentication(client):
 
 def test_create_farm_succeeds_for_authenticated_user(client):
     token = _login_token(client)
+    owner = config.get_db().users.find_one({"username": "farmer_one"})
 
     response = client.post(
         "/api/farms",
@@ -60,6 +61,169 @@ def test_create_farm_succeeds_for_authenticated_user(client):
 
     assert response.status_code == 201
     assert response.get_json()["message"] == "Farm registered successfully!"
+    farm_id = response.get_json()["farm_id"]
+    farm = config.get_db().farms.find_one({"_id": ObjectId(farm_id)})
+    assert farm["owner_id"] == owner["_id"]
+
+
+def test_create_farm_ignores_frontend_owner_id(client):
+    token = _login_token(client)
+    owner = config.get_db().users.find_one({"username": "farmer_one"})
+    malicious_owner_id = ObjectId()
+
+    response = client.post(
+        "/api/farms",
+        json={
+            "farm_name": "Owned Farm",
+            "crop_type": "Wheat",
+            "owner_id": str(malicious_owner_id),
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 201
+    farm_id = response.get_json()["farm_id"]
+    farm = config.get_db().farms.find_one({"_id": ObjectId(farm_id)})
+    assert farm["owner_id"] == owner["_id"]
+    assert farm["owner_id"] != malicious_owner_id
+
+
+def test_get_farms_requires_authentication(client):
+    response = client.get("/api/farms")
+
+    assert response.status_code == 401
+
+
+def test_get_farms_only_returns_current_user_farms(client):
+    farmer_token = _login_token(client, username="farmer_one")
+    _login_token(client, username="farmer_two")
+    farmer = config.get_db().users.find_one({"username": "farmer_one"})
+    other = config.get_db().users.find_one({"username": "farmer_two"})
+
+    config.get_db().farms.insert_many(
+        [
+            {"farm_name": "Owned One", "owner_id": farmer["_id"], "sensors": [], "weather_logs": [], "alerts_history": []},
+            {"farm_name": "Owned Legacy", "owner_id": str(farmer["_id"]), "sensors": [], "weather_logs": [], "alerts_history": []},
+            {"farm_name": "Other Farm", "owner_id": other["_id"], "sensors": [], "weather_logs": [], "alerts_history": []},
+        ]
+    )
+
+    response = client.get(
+        "/api/farms",
+        headers={"Authorization": f"Bearer {farmer_token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["pagination"]["total"] == 2
+    assert {farm["farm_name"] for farm in payload["data"]} == {"Owned One", "Owned Legacy"}
+
+
+def test_admin_get_farms_returns_all_farms(client):
+    admin_token = _login_token(client, username="admin_user", role="admin")
+    _login_token(client, username="farmer_one")
+    farmer = config.get_db().users.find_one({"username": "farmer_one"})
+    admin = config.get_db().users.find_one({"username": "admin_user"})
+
+    config.get_db().farms.insert_many(
+        [
+            {"farm_name": "Admin Farm", "owner_id": admin["_id"], "sensors": [], "weather_logs": [], "alerts_history": []},
+            {"farm_name": "Farmer Farm", "owner_id": farmer["_id"], "sensors": [], "weather_logs": [], "alerts_history": []},
+        ]
+    )
+
+    response = client.get(
+        "/api/farms",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["pagination"]["total"] == 2
+    assert {farm["farm_name"] for farm in payload["data"]} == {"Admin Farm", "Farmer Farm"}
+
+
+def test_normal_user_cannot_get_other_users_farm(client):
+    _login_token(client, username="owner_user")
+    intruder_token = _login_token(client, username="intruder_user")
+    owner = config.get_db().users.find_one({"username": "owner_user"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {"farm_name": "Private Farm", "owner_id": owner["_id"], "sensors": [], "weather_logs": [], "alerts_history": []}
+        ).inserted_id
+    )
+
+    response = client.get(
+        f"/api/farms/{farm_id}",
+        headers={"Authorization": f"Bearer {intruder_token}"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_admin_can_get_any_farm(client):
+    admin_token = _login_token(client, username="admin_user", role="admin")
+    _login_token(client, username="owner_user")
+    owner = config.get_db().users.find_one({"username": "owner_user"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {"farm_name": "Admin Visible Farm", "owner_id": owner["_id"], "sensors": [], "weather_logs": [], "alerts_history": []}
+        ).inserted_id
+    )
+
+    response = client.get(
+        f"/api/farms/{farm_id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["farm_name"] == "Admin Visible Farm"
+
+
+def test_normal_user_cannot_update_or_patch_other_users_farm(client):
+    _login_token(client, username="owner_user")
+    intruder_token = _login_token(client, username="intruder_user")
+    owner = config.get_db().users.find_one({"username": "owner_user"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {"farm_name": "Private Update Farm", "owner_id": owner["_id"], "sensors": [], "weather_logs": [], "alerts_history": []}
+        ).inserted_id
+    )
+
+    put_response = client.put(
+        f"/api/farms/{farm_id}",
+        json={"farm_name": "Stolen Farm"},
+        headers={"Authorization": f"Bearer {intruder_token}"},
+    )
+    patch_response = client.patch(
+        f"/api/farms/{farm_id}",
+        json={"farm_name": "Stolen Farm"},
+        headers={"Authorization": f"Bearer {intruder_token}"},
+    )
+
+    assert put_response.status_code == 403
+    assert patch_response.status_code == 403
+    farm = config.get_db().farms.find_one({"_id": ObjectId(farm_id)})
+    assert farm["farm_name"] == "Private Update Farm"
+
+
+def test_normal_user_cannot_delete_other_users_farm(client):
+    _login_token(client, username="owner_user")
+    intruder_token = _login_token(client, username="intruder_user")
+    owner = config.get_db().users.find_one({"username": "owner_user"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {"farm_name": "Private Delete Farm", "owner_id": owner["_id"], "sensors": [], "weather_logs": [], "alerts_history": []}
+        ).inserted_id
+    )
+
+    response = client.delete(
+        f"/api/farms/{farm_id}",
+        headers={"Authorization": f"Bearer {intruder_token}"},
+    )
+
+    assert response.status_code == 403
+    assert config.get_db().farms.find_one({"_id": ObjectId(farm_id)}) is not None
 
 
 def test_create_farm_creates_default_sensors(client):
