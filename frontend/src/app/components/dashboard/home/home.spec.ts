@@ -63,4 +63,30 @@ describe('Home', () => {
   it('should prefer display name in the greeting', () => {
     expect(component.greetingName).toBe('Farmer One');
   });
+
+  it('should map greeting by hour ranges', () => {
+    expect(component.getGreetingForHour(5)).toBe('Good morning');
+    expect(component.getGreetingForHour(11)).toBe('Good morning');
+    expect(component.getGreetingForHour(12)).toBe('Good afternoon');
+    expect(component.getGreetingForHour(16)).toBe('Good afternoon');
+    expect(component.getGreetingForHour(17)).toBe('Good evening');
+    expect(component.getGreetingForHour(21)).toBe('Good evening');
+    expect(component.getGreetingForHour(22)).toBe('Good night');
+    expect(component.getGreetingForHour(4)).toBe('Good night');
+  });
+
+  it('should show exact farm coordinates context for exact location source', () => {
+    (component as any).dashboardLocationSource = 'manual_coordinates';
+    expect(component.locationContextNote).toBe('Using exact farm coordinates');
+  });
+
+  it('should show approximate demo context for demo location source', () => {
+    (component as any).dashboardLocationSource = 'approximate_demo_location';
+    expect(component.locationContextNote).toBe('Using approximate demo coordinates');
+  });
+
+  it('should default to device timezone context when no source is provided', () => {
+    (component as any).dashboardLocationSource = null;
+    expect(component.locationContextNote).toBe('Using your device timezone');
+  });
 });

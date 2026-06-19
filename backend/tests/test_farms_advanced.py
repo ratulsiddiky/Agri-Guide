@@ -290,7 +290,7 @@ def test_dashboard_summary_only_includes_current_user_farms_and_sensors(client):
     farmer = config.get_db().users.find_one({"username": "farmer_one"})
     other = config.get_db().users.find_one({"username": "farmer_two"})
 
-    config.get_db().farms.insert_many(
+    insertion = config.get_db().farms.insert_many(
         [
             {
                 "farm_name": "Owned Farm",
@@ -336,6 +336,7 @@ def test_dashboard_summary_only_includes_current_user_farms_and_sensors(client):
             },
         ]
     )
+    owned_farm_id = str(insertion.inserted_ids[0])
 
     response = client.get(
         "/api/dashboard/summary",
@@ -355,6 +356,11 @@ def test_dashboard_summary_only_includes_current_user_farms_and_sensors(client):
         "temp-owned",
         "hum-owned",
     ]
+    assert payload["location_source"] == "approximate_demo_location"
+    assert payload["latitude"] == 54.5973
+    assert payload["longitude"] == -5.9301
+    assert payload["primary_farm_id"] == owned_farm_id
+    assert "timezone" not in payload
 
 
 def test_farm_sensors_endpoint_works_for_owner(client):

@@ -396,6 +396,8 @@ def _open_meteo_weather_payload(farm, latitude, longitude, location_source, weat
         "weather_code": weather_code,
         "condition_summary": _weather_condition_summary(weather_code),
         "timestamp": current.get("time") or datetime.now(timezone.utc).isoformat(),
+        "timezone": weather_data.get("timezone"),
+        "timezone_abbreviation": weather_data.get("timezone_abbreviation"),
         "provider": "Open-Meteo",
         "data_source": "open_meteo_current_weather",
     }
@@ -437,6 +439,59 @@ def _farm_weather_payload(farm, timeout=4):
         return payload
     except (requests.RequestException, ValueError):
         return _fallback_weather_payload(farm, latitude, longitude, location_source)
+
+
+def _farm_sort_key(farm):
+    farm_id = farm.get("_id")
+    if isinstance(farm_id, ObjectId):
+        return farm_id.generation_time
+
+    created_at = farm.get("created_at")
+    if isinstance(created_at, datetime):
+        return created_at
+
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _select_primary_farm(farms):
+    if not farms:
+        return None
+
+    exact_coordinate_farms = []
+    for farm in farms:
+        latitude = _to_float(farm.get("latitude"))
+        longitude = _to_float(farm.get("longitude"))
+        if latitude is not None and longitude is not None:
+            exact_coordinate_farms.append(farm)
+
+    candidates = exact_coordinate_farms or farms
+    return max(candidates, key=_farm_sort_key)
+
+
+def _extract_farm_timezone(farm):
+    if not isinstance(farm, dict):
+        return None
+
+    timezone_value = farm.get("timezone")
+    if isinstance(timezone_value, str) and timezone_value.strip():
+        return timezone_value.strip()
+
+    weather = farm.get("weather")
+    if isinstance(weather, dict):
+        timezone_value = weather.get("timezone")
+        if isinstance(timezone_value, str) and timezone_value.strip():
+            return timezone_value.strip()
+
+    weather_logs = farm.get("weather_logs")
+    if isinstance(weather_logs, list):
+        for entry in reversed(weather_logs):
+            if not isinstance(entry, dict):
+                continue
+            timezone_value = entry.get("timezone")
+            if isinstance(timezone_value, str) and timezone_value.strip():
+                return timezone_value.strip()
+
+    return None
 
 
 def get_farm_if_authorised(farm_id, current_user):
@@ -1177,6 +1232,7 @@ def get_dashboard_summary(current_user):
     latest_humidity_sensor = max(humidity_sensors, key=_sensor_timestamp, default=None)
     latest_temperature = _sensor_numeric_value(latest_temperature_sensor) if latest_temperature_sensor else None
     latest_humidity = _sensor_numeric_value(latest_humidity_sensor) if latest_humidity_sensor else None
+    primary_farm = _select_primary_farm(farms)
 
     if average_soil_moisture is None:
         irrigation_recommendation = "Add soil moisture sensors to calculate irrigation guidance."
@@ -1187,21 +1243,29 @@ def get_dashboard_summary(current_user):
     else:
         irrigation_recommendation = "No irrigation required: soil moisture is in the optimal range."
 
-    return make_response(
-        jsonify(
-            {
-                "total_farms": len(farms),
-                "total_sensors": len(sensors),
-                "average_soil_moisture": average_soil_moisture,
-                "latest_temperature": latest_temperature,
-                "latest_humidity": latest_humidity,
-                "active_alerts_count": active_alerts_count,
-                "irrigation_recommendation": irrigation_recommendation,
-                "sensor_rows": sensor_rows[:8],
-            }
-        ),
-        200,
-    )
+    payload = {
+        "total_farms": len(farms),
+        "total_sensors": len(sensors),
+        "average_soil_moisture": average_soil_moisture,
+        "latest_temperature": latest_temperature,
+        "latest_humidity": latest_humidity,
+        "active_alerts_count": active_alerts_count,
+        "irrigation_recommendation": irrigation_recommendation,
+        "sensor_rows": sensor_rows[:8],
+    }
+
+    if primary_farm:
+        latitude, longitude, location_source = _farm_coordinates(primary_farm)
+        payload["location_source"] = location_source
+        payload["latitude"] = latitude
+        payload["longitude"] = longitude
+        payload["primary_farm_id"] = str(primary_farm.get("_id"))
+
+        timezone_value = _extract_farm_timezone(primary_farm)
+        if timezone_value:
+            payload["timezone"] = timezone_value
+
+    return make_response(jsonify(payload), 200)
 
 
 @farms_bp.route("/api/farms/region/<region_name>/insights", methods=["GET"])

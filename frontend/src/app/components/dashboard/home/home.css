@@ -54,6 +54,13 @@
   line-height: 1.6;
 }
 
+.hero-context {
+  margin: 0.4rem 0 0;
+  color: #2f6659;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .hero-actions {
   flex: 0 0 auto;
   display: flex;

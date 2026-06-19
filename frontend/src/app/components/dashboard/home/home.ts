@@ -30,6 +30,8 @@ export class Home implements OnInit, OnDestroy {
 
   totalFarms = 0;
   isLoadingStats = true;
+  private dashboardLocationSource: DashboardSummaryResponse['location_source'] | null = null;
+  private dashboardTimezone: string | null = null;
   private hasUserSummary = false;
   private destroy$ = new Subject<void>();
 
@@ -109,6 +111,33 @@ export class Home implements OnInit, OnDestroy {
   get greetingName(): string {
     const user = this.authService.currentUserSignal();
     return user?.display_name || user?.username || 'Farmer';
+  }
+
+  get greetingMessage(): string {
+    return this.getGreetingForHour(this.getCurrentHour());
+  }
+
+  get locationContextNote(): string {
+    if (this.dashboardLocationSource === 'manual_coordinates' || this.dashboardLocationSource === 'browser_geolocation') {
+      return 'Using exact farm coordinates';
+    }
+    if (this.dashboardLocationSource === 'approximate_demo_location') {
+      return 'Using approximate demo coordinates';
+    }
+    return 'Using your device timezone';
+  }
+
+  getGreetingForHour(hour: number): string {
+    if (hour >= 5 && hour < 12) {
+      return 'Good morning';
+    }
+    if (hour >= 12 && hour < 17) {
+      return 'Good afternoon';
+    }
+    if (hour >= 17 && hour < 22) {
+      return 'Good evening';
+    }
+    return 'Good night';
   }
 
   get dashboardKpiCards() {
@@ -217,10 +246,14 @@ export class Home implements OnInit, OnDestroy {
     this.isLoadingStats = false;
     if (!summary) {
       this.totalFarms = 0;
+      this.dashboardLocationSource = null;
+      this.dashboardTimezone = null;
       return;
     }
 
     this.hasUserSummary = true;
+    this.dashboardLocationSource = summary.location_source ?? null;
+    this.dashboardTimezone = summary.timezone ?? null;
     this.totalFarms = summary.total_farms;
     this.updateKpiCard('Total Farms', `${summary.total_farms}`, 'Your farms');
     this.updateKpiCard('Total Sensors', `${summary.total_sensors}`, 'Across your farms');
@@ -265,6 +298,26 @@ export class Home implements OnInit, OnDestroy {
     } else {
       this.sensorRows = [];
     }
+  }
+
+  private getCurrentHour(): number {
+    if (this.dashboardTimezone) {
+      try {
+        const formatter = new Intl.DateTimeFormat('en-GB', {
+          hour: '2-digit',
+          hour12: false,
+          timeZone: this.dashboardTimezone,
+        });
+        const hour = Number.parseInt(formatter.format(new Date()), 10);
+        if (Number.isFinite(hour)) {
+          return hour;
+        }
+      } catch (error) {
+        console.warn('Unable to parse dashboard timezone, using device timezone instead.', error);
+      }
+    }
+
+    return new Date().getHours();
   }
 
   private applyLatestSensors(sensors: LatestSensorsResponse | null): void {

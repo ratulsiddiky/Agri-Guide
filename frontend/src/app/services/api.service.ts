@@ -80,6 +80,11 @@ export interface DashboardSummaryResponse {
   active_alerts_count: number;
   irrigation_recommendation: string;
   sensor_rows: DashboardSensorRow[];
+  location_source?: FarmLocationSource;
+  latitude?: number;
+  longitude?: number;
+  primary_farm_id?: string;
+  timezone?: string;
 }
 
 export interface SensorHistoryResponse {
