@@ -11,6 +11,8 @@ CUSTOM_MODEL_NAME = "Custom crop disease classifier"
 CUSTOM_PROVIDER = "Agri Guide trained model"
 CUSTOM_MODE = "custom_trained_model"
 DISCLAIMER = "AI-assisted diagnosis. Please verify serious crop disease decisions with an agricultural expert."
+IMAGE_GUIDANCE = "Use a clear close-up photo of one leaf, good lighting, minimal background."
+SUPPORTED_CROP_WARNING = "This model currently supports tomato, potato, and pepper bell leaf images only."
 
 EXPECTED_LABELS = [
     "Pepper__bell___Bacterial_spot",
@@ -319,7 +321,18 @@ def _load_model_and_labels():
     return _MODEL, _LABELS
 
 
-def _uncertain_result(confidence):
+def _top_predictions(scores, labels, runtime):
+    ranked_indexes = runtime["np"].argsort(scores)[::-1][:3]
+    return [
+        {
+            "label": labels[int(index)] if int(index) < len(labels) else "unknown",
+            "confidence": round(float(scores[int(index)]) * 100, 2),
+        }
+        for index in ranked_indexes
+    ]
+
+
+def _uncertain_result(confidence, top_predictions=None):
     label = "Uncertain crop disease diagnosis"
     prediction = {
         "diagnosis_key": "custom_uncertain",
@@ -333,6 +346,7 @@ def _uncertain_result(confidence):
             "Photograph both healthy and affected leaves for comparison.",
         ],
         "raw_label": None,
+        "top_predictions": top_predictions or [],
     }
     advice = {
         "explanation": "The trained model could not classify this image confidently enough for disease-specific advice.",
@@ -355,6 +369,7 @@ def _uncertain_result(confidence):
         "when_to_seek_expert_help": "Seek expert help if symptoms are spreading, affecting fruit or stems, or causing rapid plant decline.",
         "confidence_explanation": "Confidence was below the configured threshold, so the result is marked uncertain.",
         "advisory_disclaimer": DISCLAIMER,
+        "image_guidance": IMAGE_GUIDANCE,
     }
     return _pack_result(prediction, advice)
 
@@ -372,7 +387,7 @@ def _pack_result(prediction, advice):
     }
 
 
-def _result_for_label(raw_label, confidence):
+def _result_for_label(raw_label, confidence, top_predictions=None):
     entry = LABEL_ADVICE.get(raw_label)
     if entry is None:
         return None
@@ -385,6 +400,7 @@ def _result_for_label(raw_label, confidence):
         "recommendation": entry["recommendation"],
         "prevention_steps": entry["prevention_tips"],
         "raw_label": raw_label,
+        "top_predictions": top_predictions or [],
     }
     advice = {
         "explanation": entry["summary"],
@@ -398,6 +414,7 @@ def _result_for_label(raw_label, confidence):
         "confidence_explanation": "Confidence is the trained model probability for the selected crop disease class.",
         "advisory_disclaimer": DISCLAIMER,
         "disease_risk": entry["risk"],
+        "image_guidance": IMAGE_GUIDANCE,
     }
     return _pack_result(prediction, advice)
 
@@ -428,10 +445,11 @@ def predict_crop_disease(image_bytes):
         if class_index >= len(labels):
             raise ValueError("prediction class index is outside labels list")
 
+        top_predictions = _top_predictions(scores, labels, runtime)
         if confidence < _confidence_threshold():
-            return _uncertain_result(confidence)
+            return _uncertain_result(confidence, top_predictions)
 
-        return _result_for_label(labels[class_index], confidence)
+        return _result_for_label(labels[class_index], confidence, top_predictions)
     except Exception as exc:
         LOGGER.warning("Custom crop model inference failed; using simulated fallback: %s", exc)
         return None

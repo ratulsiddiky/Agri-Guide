@@ -36,11 +36,24 @@
 
         <div class="diagnosis">
           <h3>{{ scan.recommendation }}</h3>
+          @if (isUncertainScan(scan)) {
+            <div class="disclaimer-box warning-box">
+              <strong>Uncertain result</strong>
+              <p>This is not a confirmed disease diagnosis. Confirm the crop type and retake a clearer leaf photo before acting.</p>
+            </div>
+          }
           <p>{{ scan.explanation || 'The scan compares visible crop symptoms with the simulated diagnosis knowledge base.' }}</p>
         </div>
 
+        @if (scan.supported_crop_warning) {
+          <div class="disclaimer-box warning-box">
+            <strong>Supported crops</strong>
+            <p>{{ scan.supported_crop_warning }}</p>
+          </div>
+        }
+
         <div class="metric-row">
-          <span>Confidence</span>
+          <span>{{ isUncertainScan(scan) ? 'Final confidence' : 'Confidence' }}</span>
           <strong>{{ confidencePercent(scan) }}</strong>
         </div>
         <div class="metric-row">
@@ -110,6 +123,18 @@
           <span>Latency</span>
           <strong>{{ scan.latency_ms }} ms</strong>
         </div>
+
+        @if (scan.top_predictions?.length) {
+          <details class="model-alternatives">
+            <summary>Model alternatives</summary>
+            <ul class="steps-list">
+              <li *ngFor="let prediction of scan.top_predictions">
+                <span>{{ prediction.label }}</span>
+                <strong>{{ predictionConfidencePercent(prediction.confidence) }}</strong>
+              </li>
+            </ul>
+          </details>
+        }
       </article>
     </section>
 
@@ -169,6 +194,13 @@
         <strong>Advisory disclaimer</strong>
         <p>{{ scan.disclaimer || scan.advisory_disclaimer || 'AI-assisted diagnosis. Please verify serious crop disease decisions with an agricultural expert.' }}</p>
       </div>
+
+      @if (scan.image_guidance) {
+        <div class="disclaimer-box image-note">
+          <strong>Image guidance</strong>
+          <p>{{ scan.image_guidance }}</p>
+        </div>
+      }
     </section>
   }
 </main>

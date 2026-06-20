@@ -228,12 +228,31 @@ export class CropScan implements OnInit, OnDestroy {
   }
 
   confidencePercent(scan: CropScanResponse): string {
-    return `${Math.round((scan.confidence || 0) * 100)}%`;
+    if (scan.confidence === null || scan.confidence === undefined) {
+      return 'Not final';
+    }
+    return `${Math.round(scan.confidence * 100)}%`;
+  }
+
+  predictionConfidencePercent(confidence: number): string {
+    return `${confidence > 1 ? Math.round(confidence) : Math.round(confidence * 100)}%`;
+  }
+
+  isUncertainScan(scan: CropScanResponse | null = this.result): boolean {
+    if (!scan) {
+      return false;
+    }
+    return (
+      scan.ai_mode === 'custom_trained_model_uncertain' ||
+      scan.model_mode === 'custom_trained_model_uncertain' ||
+      scan.label === 'Uncertain crop disease diagnosis' ||
+      scan.diagnosis === 'Uncertain crop disease diagnosis'
+    );
   }
 
   scanModeBadge(): string {
     const mode = this.result?.ai_mode || this.result?.model_mode || '';
-    if (mode === 'custom_trained_model') {
+    if (mode === 'custom_trained_model' || mode === 'custom_trained_model_uncertain') {
       return 'Custom AI';
     }
     if (mode === 'simulated_ai') {

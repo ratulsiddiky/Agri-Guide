@@ -331,6 +331,176 @@ def test_crop_scan_custom_model_prediction_maps_to_response_shape(client, monkey
     assert "backend/ml_models" not in str(payload)
 
 
+def test_crop_scan_custom_model_crop_mismatch_returns_uncertain_result(client, monkeypatch):
+    custom_result = {
+        "prediction": {
+            "diagnosis_key": "Tomato_Late_blight",
+            "label": "Tomato late blight",
+            "confidence": 1.0,
+            "severity": "high",
+            "recommendation": "Inspect tomatoes immediately.",
+            "prevention_steps": ["Improve airflow."],
+            "raw_label": "Tomato_Late_blight",
+            "top_predictions": [
+                {"label": "Tomato_Late_blight", "confidence": 100.0},
+                {"label": "Tomato_Early_blight", "confidence": 0.0},
+                {"label": "Pepper__bell___healthy", "confidence": 0.0},
+            ],
+        },
+        "advice": {
+            "explanation": "The image is most consistent with tomato late blight.",
+            "severity_explanation": "High severity.",
+            "likely_causes": ["Wet weather"],
+            "possible_causes": ["Wet weather"],
+            "immediate_actions": ["Inspect nearby tomato plants today"],
+            "prevention_plan": ["Improve airflow."],
+            "monitoring_advice": "Monitor daily.",
+            "when_to_seek_expert_help": "Seek expert help.",
+            "confidence_explanation": "Confidence is the trained model probability.",
+            "advisory_disclaimer": "AI-assisted diagnosis. Please verify serious crop disease decisions with an agricultural expert.",
+            "disease_risk": "high",
+            "image_guidance": "Use a clear close-up photo of one leaf, good lighting, minimal background.",
+        },
+        "metadata": {
+            "model": "Custom crop disease classifier",
+            "provider": "Agri Guide trained model",
+            "ai_mode": "custom_trained_model",
+            "model_mode": "custom_trained_model",
+        },
+    }
+    monkeypatch.setenv("AI_PROVIDER", "custom_model")
+    monkeypatch.setattr(
+        smart_routes.crop_disease_model,
+        "predict_crop_disease",
+        lambda _image_bytes: custom_result,
+    )
+    token = _login_token(client)
+
+    response = _upload_scan(client, token, filename="pepper_leaf.png", crop_type="pepper bell")
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["diagnosis"] == "Uncertain crop disease diagnosis"
+    assert payload["label"] == "Uncertain crop disease diagnosis"
+    assert payload["confidence"] is None
+    assert payload["severity"] == "medium"
+    assert payload["disease_risk"] == "uncertain"
+    assert payload["summary"] == "The selected crop type does not match the model prediction."
+    assert payload["recommendation"] == "Retake a clear close-up leaf photo and confirm the crop type."
+    assert payload["urgent_actions"] == []
+    assert payload["model_mode"] == "custom_trained_model_uncertain"
+    assert payload["ai_mode"] == "custom_trained_model_uncertain"
+    assert payload["selected_crop_group"] == "pepper bell"
+    assert payload["predicted_crop_group"] == "tomato"
+    assert payload["top_predictions"][0]["label"] == "Tomato_Late_blight"
+    assert "backend/ml_models" not in str(payload)
+
+
+def test_crop_scan_custom_model_matching_crop_stays_confirmed(client, monkeypatch):
+    custom_result = {
+        "prediction": {
+            "diagnosis_key": "Tomato_Early_blight",
+            "label": "Tomato early blight",
+            "confidence": 0.91,
+            "severity": "medium",
+            "recommendation": "Remove affected lower leaves.",
+            "prevention_steps": ["Avoid overhead watering."],
+            "raw_label": "Tomato_Early_blight",
+            "top_predictions": [{"label": "Tomato_Early_blight", "confidence": 91.0}],
+        },
+        "advice": {
+            "explanation": "The image is most consistent with tomato early blight.",
+            "severity_explanation": "Medium severity.",
+            "likely_causes": ["Warm humid conditions"],
+            "possible_causes": ["Warm humid conditions"],
+            "immediate_actions": ["Inspect lower leaves"],
+            "prevention_plan": ["Avoid overhead watering."],
+            "monitoring_advice": "Scout again.",
+            "when_to_seek_expert_help": "Seek expert help if symptoms spread.",
+            "confidence_explanation": "Confidence is the trained model probability.",
+            "advisory_disclaimer": "AI-assisted diagnosis. Please verify serious crop disease decisions with an agricultural expert.",
+            "disease_risk": "medium",
+            "image_guidance": "Use a clear close-up photo of one leaf, good lighting, minimal background.",
+        },
+        "metadata": {
+            "model": "Custom crop disease classifier",
+            "provider": "Agri Guide trained model",
+            "ai_mode": "custom_trained_model",
+            "model_mode": "custom_trained_model",
+        },
+    }
+    monkeypatch.setenv("AI_PROVIDER", "custom_model")
+    monkeypatch.setattr(
+        smart_routes.crop_disease_model,
+        "predict_crop_disease",
+        lambda _image_bytes: custom_result,
+    )
+    token = _login_token(client)
+
+    response = _upload_scan(client, token, filename="tomato_leaf.png", crop_type="Tomato")
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["diagnosis"] == "Tomato early blight"
+    assert payload["confidence"] == 0.91
+    assert payload["model_mode"] == "custom_trained_model"
+    assert payload["supported_crop_warning"] is None
+
+
+def test_crop_scan_custom_model_unsupported_crop_returns_warning(client, monkeypatch):
+    custom_result = smart_routes.crop_disease_model._result_for_label(
+        "Potato___healthy",
+        0.88,
+        [{"label": "Potato___healthy", "confidence": 88.0}],
+    )
+    monkeypatch.setenv("AI_PROVIDER", "custom_model")
+    monkeypatch.setattr(
+        smart_routes.crop_disease_model,
+        "predict_crop_disease",
+        lambda _image_bytes: custom_result,
+    )
+    token = _login_token(client)
+
+    response = _upload_scan(client, token, filename="wheat_leaf.png", crop_type="Wheat")
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["supported_crop_warning"] == "This model currently supports tomato, potato, and pepper bell leaf images only."
+    assert payload["diagnosis"] == "Healthy potato leaf"
+    assert payload["model_mode"] == "custom_trained_model"
+
+
+def test_crop_scan_custom_model_response_includes_top_predictions(client, monkeypatch):
+    custom_result = smart_routes.crop_disease_model._result_for_label(
+        "Pepper__bell___healthy",
+        0.76,
+        [
+            {"label": "Pepper__bell___healthy", "confidence": 76.0},
+            {"label": "Pepper__bell___Bacterial_spot", "confidence": 18.0},
+            {"label": "Tomato_healthy", "confidence": 6.0},
+        ],
+    )
+    monkeypatch.setenv("AI_PROVIDER", "custom_model")
+    monkeypatch.setattr(
+        smart_routes.crop_disease_model,
+        "predict_crop_disease",
+        lambda _image_bytes: custom_result,
+    )
+    token = _login_token(client)
+
+    response = _upload_scan(client, token, filename="pepper_leaf.png", crop_type="Bell pepper")
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["top_predictions"] == [
+        {"label": "Pepper__bell___healthy", "confidence": 76.0},
+        {"label": "Pepper__bell___Bacterial_spot", "confidence": 18.0},
+        {"label": "Tomato_healthy", "confidence": 6.0},
+    ]
+    assert payload["image_guidance"] == "Use a clear close-up photo of one leaf, good lighting, minimal background."
+    assert "backend/ml_models" not in str(payload)
+
+
 def test_crop_scan_low_custom_model_confidence_is_handled_safely(client, monkeypatch):
     monkeypatch.setenv("AI_PROVIDER", "custom_model")
     monkeypatch.setattr(

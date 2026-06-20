@@ -40,7 +40,23 @@ export class CropScanDetail implements OnInit, OnDestroy {
   }
 
   confidencePercent(scan: CropScanResponse): string {
-    return `${Math.round((scan.confidence || 0) * 100)}%`;
+    if (scan.confidence === null || scan.confidence === undefined) {
+      return 'Not final';
+    }
+    return `${Math.round(scan.confidence * 100)}%`;
+  }
+
+  predictionConfidencePercent(confidence: number): string {
+    return `${confidence > 1 ? Math.round(confidence) : Math.round(confidence * 100)}%`;
+  }
+
+  isUncertainScan(scan: CropScanResponse): boolean {
+    return (
+      scan.ai_mode === 'custom_trained_model_uncertain' ||
+      scan.model_mode === 'custom_trained_model_uncertain' ||
+      scan.label === 'Uncertain crop disease diagnosis' ||
+      scan.diagnosis === 'Uncertain crop disease diagnosis'
+    );
   }
 
   farmLabel(scan: CropScanResponse): string {

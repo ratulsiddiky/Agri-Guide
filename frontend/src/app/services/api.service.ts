@@ -153,6 +153,11 @@ export interface CropDetectionResponse {
   timestamp: string;
 }
 
+export interface CropTopPrediction {
+  label: string;
+  confidence: number;
+}
+
 export interface CropScanResponse {
   scan_id: string;
   farm_id?: string | null;
@@ -162,7 +167,7 @@ export interface CropScanResponse {
   model_type: 'crop_leaf_health_classifier';
   future_upgrade_model: string;
   label: string;
-  confidence: number;
+  confidence: number | null;
   severity: string;
   recommendation: string;
   prevention_steps: string[];
@@ -194,6 +199,12 @@ export interface CropScanResponse {
   urgent_actions?: string[];
   prevention_tips?: string[];
   disclaimer?: string;
+  top_predictions?: CropTopPrediction[];
+  supported_crop_warning?: string | null;
+  image_guidance?: string;
+  raw_label?: string | null;
+  selected_crop_group?: string | null;
+  predicted_crop_group?: string | null;
   model?: string;
   provider?: string;
   ai_mode?: string;

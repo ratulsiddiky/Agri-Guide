@@ -42,6 +42,9 @@
         <small class="d-block mt-1 text-muted">
           {{ selectedImageStatus() }}
         </small>
+        <small class="d-block mt-1 text-muted">
+          Custom AI currently supports tomato, potato, and pepper bell leaf images.
+        </small>
 
         @if (cameraError) {
           <div class="alert alert-info py-2 mt-2 mb-0">{{ cameraError }}</div>
@@ -89,7 +92,7 @@
           id="cropType"
           class="form-control"
           type="text"
-          placeholder="e.g. Tomato, Wheat, Potato"
+          placeholder="e.g. Tomato, Potato, Pepper bell"
           [(ngModel)]="cropType"
         />
       </div>
@@ -113,7 +116,7 @@
       @if (result) {
         <div class="scan-preview">
           @if (resultImageUrl) {
-            <img [src]="resultImageUrl" [alt]="result.image_metadata?.filename || 'Crop scan image preview'" />
+            <img [src]="resultImageUrl" [alt]="result.image_metadata.filename || 'Crop scan image preview'" />
           } @else if (resultImageLoading) {
             <div class="preview-placeholder">Loading image preview...</div>
           } @else if (resultImageUnavailable) {
@@ -127,12 +130,32 @@
         <div class="diagnosis">
           <span class="severity" [ngClass]="'severity-' + result.severity">{{ result.severity }}</span>
           <h3>{{ result.label }}</h3>
+          @if (isUncertainScan(result)) {
+            <div class="disclaimer-box warning-box">
+              <strong>Uncertain result</strong>
+              <p>This is not a confirmed disease diagnosis. Confirm the crop type and retake a clearer leaf photo before acting.</p>
+            </div>
+          }
           <p>{{ result.recommendation }}</p>
           <p>{{ result.explanation || 'The scan compares visible crop symptoms with the simulated diagnosis knowledge base.' }}</p>
         </div>
 
+        @if (result.supported_crop_warning) {
+          <div class="disclaimer-box warning-box">
+            <strong>Supported crops</strong>
+            <p>{{ result.supported_crop_warning }}</p>
+          </div>
+        }
+
+        @if (result.image_guidance) {
+          <div class="disclaimer-box image-note">
+            <strong>Image guidance</strong>
+            <p>{{ result.image_guidance }}</p>
+          </div>
+        }
+
         <div class="metric-row">
-          <span>Confidence</span>
+          <span>{{ isUncertainScan(result) ? 'Final confidence' : 'Confidence' }}</span>
           <strong>{{ confidencePercent(result) }}</strong>
         </div>
         <div class="metric-row">
@@ -151,6 +174,18 @@
           <span>Mode</span>
           <strong>{{ result.ai_mode || result.model_mode }}</strong>
         </div>
+
+        @if (result.top_predictions?.length) {
+          <details class="model-alternatives">
+            <summary>Model alternatives</summary>
+            <ul class="steps-list">
+              <li *ngFor="let prediction of result.top_predictions">
+                <span>{{ prediction.label }}</span>
+                <strong>{{ predictionConfidencePercent(prediction.confidence) }}</strong>
+              </li>
+            </ul>
+          </details>
+        }
 
         <h4>Possible causes</h4>
         <ul class="steps-list">
@@ -217,7 +252,7 @@
                 <span class="severity severity-{{ scan.severity || 'low' }}">{{ scan.severity || 'low' }}</span>
               </div>
               <span>{{ farmName(scan.farm_id) }} · {{ scan.crop_type || 'Crop not specified' }}</span>
-              <small>{{ scan.image_metadata?.filename || 'Image' }} · {{ scan.timestamp | date:'short' }}</small>
+              <small>{{ scan.image_metadata.filename || 'Image' }} · {{ scan.timestamp | date:'short' }}</small>
               <small class="history-summary">{{ historySummary(scan) }}</small>
             </div>
             <div class="history-score">

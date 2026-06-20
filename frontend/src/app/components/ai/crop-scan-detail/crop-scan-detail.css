@@ -191,6 +191,26 @@
   color: #6b4d11;
 }
 
+.model-alternatives {
+  margin: 0.85rem 0 0;
+}
+
+.model-alternatives summary {
+  cursor: pointer;
+  color: #166534;
+  font-weight: 800;
+}
+
+.model-alternatives .steps-list {
+  margin-top: 0.75rem;
+}
+
+.model-alternatives li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .image-note {
   margin-top: 0;
   margin-bottom: 0.25rem;

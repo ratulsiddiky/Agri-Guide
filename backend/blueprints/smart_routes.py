@@ -41,6 +41,9 @@ ADVISORY_DISCLAIMER = (
     "This AI crop scan is advisory support only. Confirm important decisions with field scouting, local conditions, "
     "and expert agronomy advice when needed."
 )
+SUPPORTED_CROP_WARNING = "This model currently supports tomato, potato, and pepper bell leaf images only."
+IMAGE_GUIDANCE = "Use a clear close-up photo of one leaf, good lighting, minimal background."
+CUSTOM_UNCERTAIN_MODE = "custom_trained_model_uncertain"
 
 CROP_DIAGNOSIS_KNOWLEDGE_BASE = {
     "healthy": {
@@ -463,19 +466,112 @@ def _build_scan_advice(prediction, crop_type=None):
         "when_to_seek_expert_help": selected["when_to_seek_expert_help"],
         "confidence_explanation": selected["confidence_explanation"],
         "advisory_disclaimer": ADVISORY_DISCLAIMER,
+        "image_guidance": IMAGE_GUIDANCE,
     }
+
+
+def _normalize_crop_group(crop_type):
+    normalized = " ".join((crop_type or "").strip().lower().replace("_", " ").replace("-", " ").split())
+    if not normalized:
+        return None
+
+    if normalized in {"tomato", "tomatoes"}:
+        return "tomato"
+    if normalized in {"potato", "potatoes"}:
+        return "potato"
+    if normalized in {"pepper", "peppers", "bell pepper", "bell peppers", "pepper bell", "pepper bells", "capsicum"}:
+        return "pepper bell"
+    return "unsupported"
+
+
+def _crop_group_from_label(raw_label):
+    label = raw_label or ""
+    if label.startswith("Tomato_"):
+        return "tomato"
+    if label.startswith("Potato___"):
+        return "potato"
+    if label.startswith("Pepper__bell___"):
+        return "pepper bell"
+    return None
+
+
+def _custom_crop_mismatch_result(custom_result, user_crop_group, predicted_crop_group):
+    top_predictions = custom_result.get("prediction", {}).get("top_predictions", [])
+    prediction = {
+        "diagnosis_key": "custom_crop_mismatch",
+        "label": "Uncertain crop disease diagnosis",
+        "confidence": None,
+        "severity": "medium",
+        "recommendation": "Retake a clear close-up leaf photo and confirm the crop type.",
+        "prevention_steps": [
+            "Monitor the plant for spreading spots, yellowing, wilting, or leaf damage.",
+            "Compare symptoms across several leaves before making treatment decisions.",
+            "Keep a record of new photos and changes in crop condition.",
+        ],
+        "raw_label": custom_result.get("prediction", {}).get("raw_label"),
+        "predicted_crop_group": predicted_crop_group,
+        "selected_crop_group": user_crop_group,
+        "top_predictions": top_predictions,
+    }
+    advice = {
+        "explanation": "The selected crop type does not match the model prediction.",
+        "severity_explanation": "Medium severity means the crop should be checked again before making treatment decisions.",
+        "likely_causes": [
+            "The selected crop type may be incorrect for this image.",
+            "The image may be outside the model's supported crop classes or not a clear leaf close-up.",
+        ],
+        "possible_causes": [
+            "The selected crop type may be incorrect for this image.",
+            "The image may be outside the model's supported crop classes or not a clear leaf close-up.",
+        ],
+        "immediate_actions": [],
+        "prevention_plan": prediction["prevention_steps"],
+        "monitoring_advice": "Retake the scan with one clear leaf and confirm the crop type before acting on a disease treatment plan.",
+        "when_to_seek_expert_help": "Seek expert help if symptoms are spreading, affecting fruit or stems, or causing rapid plant decline.",
+        "confidence_explanation": "The model prediction was not used as a final confidence because it disagreed with the selected crop type.",
+        "advisory_disclaimer": crop_disease_model.DISCLAIMER,
+        "disease_risk": "uncertain",
+        "image_guidance": IMAGE_GUIDANCE,
+    }
+    metadata = {
+        **custom_result.get("metadata", {}),
+        "ai_mode": CUSTOM_UNCERTAIN_MODE,
+        "model_mode": CUSTOM_UNCERTAIN_MODE,
+    }
+    return {
+        "prediction": prediction,
+        "advice": advice,
+        "metadata": metadata,
+    }
+
+
+def _apply_custom_crop_safety(custom_result, crop_type):
+    user_crop_group = _normalize_crop_group(crop_type)
+    if user_crop_group == "unsupported":
+        custom_result.setdefault("advice", {})["supported_crop_warning"] = SUPPORTED_CROP_WARNING
+        return custom_result
+
+    raw_label = custom_result.get("prediction", {}).get("raw_label")
+    predicted_crop_group = _crop_group_from_label(raw_label)
+    if user_crop_group and predicted_crop_group and user_crop_group != predicted_crop_group:
+        return _custom_crop_mismatch_result(custom_result, user_crop_group, predicted_crop_group)
+
+    return custom_result
 
 
 def _crop_scan_ai_result(image_bytes, filename, crop_type):
     if os.getenv("AI_PROVIDER", "simulated_ai").strip().lower() == "custom_model":
         custom_result = crop_disease_model.predict_crop_disease(image_bytes)
         if custom_result:
-            return custom_result
+            return _apply_custom_crop_safety(custom_result, crop_type)
 
     prediction = _simulated_crop_prediction(filename, crop_type)
+    advice = _build_scan_advice(prediction, crop_type)
+    if _normalize_crop_group(crop_type) == "unsupported":
+        advice["supported_crop_warning"] = SUPPORTED_CROP_WARNING
     return {
         "prediction": prediction,
-        "advice": _build_scan_advice(prediction, crop_type),
+        "advice": advice,
         "metadata": {
             "model": "Simulated crop diagnosis knowledge base",
             "provider": "simulated_ai",
@@ -505,6 +601,7 @@ def _scan_response(scan_doc):
 
     recommendation = scan_doc.get("recommendation")
     prevention_steps = prediction.get("prevention_steps", [])
+    top_predictions = prediction.get("top_predictions", [])
     immediate_actions = scan_doc.get("immediate_actions", [])
     prevention_plan = scan_doc.get("prevention_plan", [])
     advisory_disclaimer = scan_doc.get("advisory_disclaimer", "")
@@ -547,6 +644,12 @@ def _scan_response(scan_doc):
         "urgent_actions": immediate_actions,
         "prevention_tips": prevention_plan or prevention_steps,
         "disclaimer": advisory_disclaimer,
+        "top_predictions": top_predictions,
+        "supported_crop_warning": scan_doc.get("supported_crop_warning"),
+        "image_guidance": scan_doc.get("image_guidance") or IMAGE_GUIDANCE,
+        "raw_label": prediction.get("raw_label"),
+        "selected_crop_group": prediction.get("selected_crop_group"),
+        "predicted_crop_group": prediction.get("predicted_crop_group"),
         "model": model,
         "provider": provider,
         "ai_mode": ai_mode,
