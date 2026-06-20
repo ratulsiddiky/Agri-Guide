@@ -36,6 +36,7 @@ export interface UserProfile {
   created_at?: string;
   display_name?: string;
   phone?: string;
+  has_profile_image?: boolean;
 }
 
 export interface UpdateProfileRequest {
@@ -140,6 +141,20 @@ export class AuthService {
     return this.http.put<UserProfile>(`${this.baseUrl}/users/me`, payload);
   }
 
+  getProfileImage(): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/users/me/profile-image`, {
+      responseType: 'blob',
+    });
+  }
+
+  uploadProfileImage(formData: FormData): Observable<UserProfile> {
+    return this.http.post<UserProfile>(`${this.baseUrl}/users/me/profile-image`, formData);
+  }
+
+  deleteProfileImage(): Observable<UserProfile> {
+    return this.http.delete<UserProfile>(`${this.baseUrl}/users/me/profile-image`);
+  }
+
   logout() {
     return this.http
       .get(`${this.baseUrl}/logout`)
@@ -228,6 +243,7 @@ export class AuthService {
       created_at: profile.created_at,
       display_name: profile.display_name?.trim() || '',
       phone: profile.phone,
+      has_profile_image: profile.has_profile_image,
     };
 
     this.setOptionalStorageValue('display_name', nextUser.display_name);
@@ -235,6 +251,7 @@ export class AuthService {
     this.setOptionalStorageValue('contact_preference', nextUser.contact_preference);
     this.setOptionalStorageValue('created_at', nextUser.created_at);
     this.setOptionalStorageValue('phone', nextUser.phone);
+    this.setBooleanStorageValue('has_profile_image', nextUser.has_profile_image);
     this.currentUserSignal.set(nextUser);
   }
 
@@ -270,6 +287,10 @@ export class AuthService {
       created_at: localStorage.getItem('created_at') || undefined,
       display_name: localStorage.getItem('display_name') || undefined,
       phone: localStorage.getItem('phone') || undefined,
+      has_profile_image:
+        localStorage.getItem('has_profile_image') === null
+          ? undefined
+          : localStorage.getItem('has_profile_image') === 'true',
       token,
     };
   }
@@ -290,5 +311,15 @@ export class AuthService {
     localStorage.removeItem('contact_preference');
     localStorage.removeItem('created_at');
     localStorage.removeItem('phone');
+    localStorage.removeItem('has_profile_image');
+  }
+
+  private setBooleanStorageValue(key: string, value: boolean | undefined): void {
+    if (value === undefined) {
+      localStorage.removeItem(key);
+      return;
+    }
+
+    localStorage.setItem(key, String(value));
   }
 }

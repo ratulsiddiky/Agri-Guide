@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import os
 import secrets
 from urllib.parse import urlencode
 
@@ -6,6 +7,7 @@ import bcrypt
 import jwt
 from flask import Blueprint, jsonify, make_response, request
 from flask_cors import cross_origin  
+from werkzeug.utils import secure_filename
 from pymongo.errors import PyMongoError
 
 from blueprints.auth.models import (
@@ -23,10 +25,33 @@ from utils.emailer import (
 )
 from utils.validators import serialize_document
 
+try:
+    from azure.core.exceptions import AzureError, ResourceExistsError, ResourceNotFoundError
+    from azure.storage.blob import BlobServiceClient, ContentSettings
+except ImportError:  # pragma: no cover - optional dependency
+    class AzureError(Exception):
+        pass
+
+    class ResourceExistsError(AzureError):
+        pass
+
+    class ResourceNotFoundError(AzureError):
+        pass
+
+    BlobServiceClient = None
+    ContentSettings = None
+
 auth_bp = Blueprint("auth_bp", __name__)
 
 VERIFICATION_TOKEN_HOURS = 24
 PASSWORD_RESET_TOKEN_MINUTES = 60
+MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024
+PROFILE_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
+PROFILE_IMAGE_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+}
 GENERIC_PASSWORD_RESET_MESSAGE = (
     "If an Agri Guide account exists, a password reset email has been sent."
 )
@@ -42,7 +67,55 @@ def _safe_user_profile(user):
         "created_at": serialize_document(user.get("created_at")),
         "display_name": user.get("display_name", ""),
         "phone": user.get("phone", ""),
+        "has_profile_image": bool(user.get("profile_image_blob_name")),
     }
+
+
+def _profile_image_storage_config():
+    connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "").strip()
+    container_name = os.getenv("AZURE_STORAGE_CONTAINER_NAME", "crop-scans").strip()
+    if not connection_string or not container_name or BlobServiceClient is None:
+        return None
+
+    return {
+        "connection_string": connection_string,
+        "container_name": container_name,
+    }
+
+
+def _get_profile_image_container_client(ensure_exists=False):
+    storage_config = _profile_image_storage_config()
+    if storage_config is None:
+        return None
+
+    service_client = BlobServiceClient.from_connection_string(
+        storage_config["connection_string"]
+    )
+    container_client = service_client.get_container_client(storage_config["container_name"])
+    if ensure_exists:
+        try:
+            container_client.create_container()
+        except ResourceExistsError:
+            pass
+    return container_client
+
+
+def _profile_image_extension(filename):
+    filename = secure_filename(filename or "")
+    if "." not in filename:
+        return None
+
+    extension = filename.rsplit(".", 1)[1].lower()
+    if extension == "jpeg":
+        return "jpg"
+    if extension in PROFILE_IMAGE_EXTENSIONS:
+        return extension
+    return None
+
+
+def _profile_image_blob_name(user_id, extension):
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+    return f"profile-images/{secure_filename(str(user_id))}/{timestamp}-profile.{extension}"
 
 
 def _now_utc():
@@ -483,6 +556,138 @@ def update_current_user(current_user):
         if result.matched_count == 0:
             return make_response(jsonify({"message": "User not found"}), 404)
 
+    updated_user = users.find_one({"_id": current_user["_id"]})
+    return make_response(jsonify(_safe_user_profile(updated_user)), 200)
+
+
+@auth_bp.route("/api/users/me/profile-image", methods=["POST"])
+@jwt_required
+def upload_current_user_profile_image(current_user):
+    uploaded_image = request.files.get("image")
+    if uploaded_image is None or not uploaded_image.filename:
+        return make_response(jsonify({"message": "Profile image file is required."}), 400)
+
+    extension = _profile_image_extension(uploaded_image.filename)
+    if extension is None:
+        return make_response(
+            jsonify({"message": "Invalid image type. Please upload a jpg, jpeg, png, or webp file."}),
+            400,
+        )
+
+    content_type = uploaded_image.content_type or "application/octet-stream"
+    if content_type not in PROFILE_IMAGE_CONTENT_TYPES:
+        return make_response(
+            jsonify({"message": "Invalid image content type. Please upload a jpg, png, or webp image."}),
+            400,
+        )
+
+    image_bytes = uploaded_image.read()
+    if len(image_bytes) > MAX_PROFILE_IMAGE_BYTES:
+        return make_response(jsonify({"message": "Image file is too large. Maximum size is 5 MB."}), 400)
+
+    container_client = _get_profile_image_container_client(ensure_exists=True)
+    if container_client is None:
+        return make_response(
+            jsonify({"message": "Profile image storage is not configured. Initials avatar is still available."}),
+            503,
+        )
+
+    blob_name = _profile_image_blob_name(current_user["_id"], extension)
+    upload_kwargs = {"overwrite": True}
+    if ContentSettings is not None:
+        upload_kwargs["content_settings"] = ContentSettings(content_type=content_type)
+
+    try:
+        container_client.upload_blob(name=blob_name, data=image_bytes, **upload_kwargs)
+    except AzureError:
+        return make_response(
+            jsonify({"message": "Unable to save profile image right now. Initials avatar is still available."}),
+            502,
+        )
+    except Exception:
+        return make_response(
+            jsonify({"message": "Unable to save profile image right now. Initials avatar is still available."}),
+            502,
+        )
+
+    previous_blob_name = current_user.get("profile_image_blob_name")
+    if previous_blob_name and previous_blob_name != blob_name:
+        try:
+            container_client.delete_blob(previous_blob_name)
+        except ResourceNotFoundError:
+            pass
+        except Exception:
+            pass
+
+    users = config.get_db().users
+    users.update_one(
+        {"_id": current_user["_id"]},
+        {
+            "$set": {
+                "profile_image_blob_name": blob_name,
+                "profile_image_content_type": content_type,
+                "profile_image_uploaded_at": _now_utc(),
+            }
+        },
+    )
+    updated_user = users.find_one({"_id": current_user["_id"]})
+    return make_response(jsonify(_safe_user_profile(updated_user)), 200)
+
+
+@auth_bp.route("/api/users/me/profile-image", methods=["GET"])
+@jwt_required
+def get_current_user_profile_image(current_user):
+    blob_name = current_user.get("profile_image_blob_name")
+    if not blob_name:
+        return make_response(jsonify({"message": "Profile image is not set."}), 404)
+
+    container_client = _get_profile_image_container_client()
+    if container_client is None:
+        return make_response(
+            jsonify({"message": "Profile image storage is not configured."}),
+            503,
+        )
+
+    try:
+        image_bytes = container_client.download_blob(blob_name).readall()
+    except ResourceNotFoundError:
+        return make_response(jsonify({"message": "Profile image is not set."}), 404)
+    except AzureError:
+        return make_response(jsonify({"message": "Unable to load profile image."}), 502)
+    except Exception:
+        return make_response(jsonify({"message": "Unable to load profile image."}), 502)
+
+    response = make_response(image_bytes)
+    response.headers["Content-Type"] = current_user.get("profile_image_content_type") or "application/octet-stream"
+    response.headers["Content-Disposition"] = 'inline; filename="profile-image"'
+    return response
+
+
+@auth_bp.route("/api/users/me/profile-image", methods=["DELETE"])
+@jwt_required
+def delete_current_user_profile_image(current_user):
+    blob_name = current_user.get("profile_image_blob_name")
+    container_client = _get_profile_image_container_client()
+
+    if blob_name and container_client is not None:
+        try:
+            container_client.delete_blob(blob_name)
+        except ResourceNotFoundError:
+            pass
+        except Exception:
+            pass
+
+    users = config.get_db().users
+    users.update_one(
+        {"_id": current_user["_id"]},
+        {
+            "$unset": {
+                "profile_image_blob_name": "",
+                "profile_image_content_type": "",
+                "profile_image_uploaded_at": "",
+            }
+        },
+    )
     updated_user = users.find_one({"_id": current_user["_id"]})
     return make_response(jsonify(_safe_user_profile(updated_user)), 200)
 

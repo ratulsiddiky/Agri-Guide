@@ -1,5 +1,6 @@
-from base64 import b64encode
+from base64 import b64decode, b64encode
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 
 import bcrypt
 import mongomock
@@ -9,6 +10,58 @@ import config
 import blueprints.auth.auth as auth_module
 from app import create_app
 
+PNG_1X1 = b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+)
+
+
+class _FakeContentSettings:
+    def __init__(self, content_type=None):
+        self.content_type = content_type
+
+
+class _FakeBlobDownload:
+    def __init__(self, data):
+        self.data = data
+
+    def readall(self):
+        return self.data
+
+
+class _FakeContainerClient:
+    blobs = {}
+    fail_upload = False
+
+    def create_container(self):
+        return None
+
+    def upload_blob(self, name, data, **kwargs):
+        if self.fail_upload:
+            raise RuntimeError("upload failed")
+        self.blobs[name] = {
+            "data": data,
+            "kwargs": kwargs,
+        }
+
+    def download_blob(self, name):
+        if name not in self.blobs:
+            raise auth_module.ResourceNotFoundError("not found")
+        return _FakeBlobDownload(self.blobs[name]["data"])
+
+    def delete_blob(self, name):
+        if name not in self.blobs:
+            raise auth_module.ResourceNotFoundError("not found")
+        del self.blobs[name]
+
+
+class _FakeBlobServiceClient:
+    @classmethod
+    def from_connection_string(cls, connection_string):
+        return cls()
+
+    def get_container_client(self, container_name):
+        return _FakeContainerClient()
+
 
 @pytest.fixture()
 def client(monkeypatch):
@@ -17,6 +70,10 @@ def client(monkeypatch):
     config.reset_db_cache()
     monkeypatch.setattr(config, "get_mongo_client", lambda: mock_client)
     monkeypatch.setattr(config, "get_db", lambda: mock_db)
+    monkeypatch.delenv("AZURE_STORAGE_CONNECTION_STRING", raising=False)
+    monkeypatch.delenv("AZURE_STORAGE_CONTAINER_NAME", raising=False)
+    _FakeContainerClient.blobs = {}
+    _FakeContainerClient.fail_upload = False
 
     app = create_app()
     app.config.update(TESTING=True)
@@ -52,6 +109,15 @@ def _login_token(client, username="farmer_one", password="Password123!", role="u
     _insert_verified_user(username=username, password_text=password, role=role)
     response = client.post("/api/login", headers=_basic_auth(username, password))
     return response.get_json()["token"]
+
+
+def _enable_mock_blob_storage(monkeypatch, fail_upload=False):
+    monkeypatch.setenv("AZURE_STORAGE_CONNECTION_STRING", "UseDevelopmentStorage=true")
+    monkeypatch.setenv("AZURE_STORAGE_CONTAINER_NAME", "crop-scans")
+    monkeypatch.setattr(auth_module, "BlobServiceClient", _FakeBlobServiceClient)
+    monkeypatch.setattr(auth_module, "ContentSettings", _FakeContentSettings)
+    _FakeContainerClient.blobs = {}
+    _FakeContainerClient.fail_upload = fail_upload
 
 
 def test_signup_creates_user(client):
@@ -560,3 +626,137 @@ def test_update_current_user_profile_rejects_invalid_email(client):
 
     assert response.status_code == 400
     assert response.get_json()["message"] == "A valid email address is required."
+
+
+def test_profile_image_upload_requires_authentication(client):
+    response = client.post(
+        "/api/users/me/profile-image",
+        data={"image": (BytesIO(PNG_1X1), "profile.png")},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 401
+
+
+def test_profile_image_upload_rejects_invalid_file_type(client):
+    token = _login_token(client)
+
+    response = client.post(
+        "/api/users/me/profile-image",
+        data={"image": (BytesIO(b"not an image"), "profile.txt")},
+        content_type="multipart/form-data",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 400
+    assert "Invalid image type" in response.get_json()["message"]
+
+
+def test_profile_image_upload_rejects_oversized_file(client, monkeypatch):
+    monkeypatch.setattr(auth_module, "MAX_PROFILE_IMAGE_BYTES", 8)
+    token = _login_token(client)
+
+    response = client.post(
+        "/api/users/me/profile-image",
+        data={"image": (BytesIO(b"x" * 9), "profile.png")},
+        content_type="multipart/form-data",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 400
+    assert "too large" in response.get_json()["message"]
+
+
+def test_profile_image_upload_handles_missing_blob_config_safely(client):
+    token = _login_token(client)
+
+    response = client.post(
+        "/api/users/me/profile-image",
+        data={"image": (BytesIO(PNG_1X1), "profile.png")},
+        content_type="multipart/form-data",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    stored_user = config.get_db().users.find_one({"username": "farmer_one"})
+    assert response.status_code == 503
+    assert "storage is not configured" in response.get_json()["message"]
+    assert "profile_image_blob_name" not in stored_user
+
+
+def test_user_can_upload_and_read_own_profile_image(client, monkeypatch):
+    _enable_mock_blob_storage(monkeypatch)
+    token = _login_token(client)
+
+    upload_response = client.post(
+        "/api/users/me/profile-image",
+        data={"image": (BytesIO(PNG_1X1), "profile.png")},
+        content_type="multipart/form-data",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    read_response = client.get(
+        "/api/users/me/profile-image",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    stored_user = config.get_db().users.find_one({"username": "farmer_one"})
+    assert upload_response.status_code == 200
+    assert upload_response.get_json()["has_profile_image"] is True
+    assert "profile-images/" in stored_user["profile_image_blob_name"]
+    assert stored_user["profile_image_content_type"] == "image/png"
+    assert stored_user["profile_image_blob_name"] in _FakeContainerClient.blobs
+    assert read_response.status_code == 200
+    assert read_response.data == PNG_1X1
+    assert read_response.headers["Content-Type"] == "image/png"
+    assert stored_user["profile_image_blob_name"] not in str(upload_response.get_json())
+
+
+def test_user_cannot_access_another_users_profile_image(client, monkeypatch):
+    _enable_mock_blob_storage(monkeypatch)
+    owner_token = _login_token(client, username="owner_user")
+    other_token = _login_token(client, username="other_user")
+
+    client.post(
+        "/api/users/me/profile-image",
+        data={"image": (BytesIO(PNG_1X1), "profile.png")},
+        content_type="multipart/form-data",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+
+    response = client.get(
+        "/api/users/me/profile-image",
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+
+    assert response.status_code == 404
+    assert response.get_json()["message"] == "Profile image is not set."
+
+
+def test_user_can_delete_own_profile_image(client, monkeypatch):
+    _enable_mock_blob_storage(monkeypatch)
+    token = _login_token(client)
+
+    upload_response = client.post(
+        "/api/users/me/profile-image",
+        data={"image": (BytesIO(PNG_1X1), "profile.png")},
+        content_type="multipart/form-data",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    stored_user = config.get_db().users.find_one({"username": "farmer_one"})
+    blob_name = stored_user["profile_image_blob_name"]
+
+    delete_response = client.delete(
+        "/api/users/me/profile-image",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    get_response = client.get(
+        "/api/users/me/profile-image",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    updated_user = config.get_db().users.find_one({"username": "farmer_one"})
+
+    assert upload_response.status_code == 200
+    assert delete_response.status_code == 200
+    assert delete_response.get_json()["has_profile_image"] is False
+    assert blob_name not in _FakeContainerClient.blobs
+    assert "profile_image_blob_name" not in updated_user
+    assert get_response.status_code == 404

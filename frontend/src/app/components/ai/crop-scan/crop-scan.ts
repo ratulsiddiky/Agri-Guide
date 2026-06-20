@@ -231,6 +231,17 @@ export class CropScan implements OnInit, OnDestroy {
     return `${Math.round((scan.confidence || 0) * 100)}%`;
   }
 
+  scanModeBadge(): string {
+    const mode = this.result?.ai_mode || this.result?.model_mode || '';
+    if (mode === 'custom_trained_model') {
+      return 'Custom AI';
+    }
+    if (mode === 'simulated_ai') {
+      return 'Simulated AI';
+    }
+    return 'AI Scan';
+  }
+
   advicePreview(items?: string[], fallback = 'Not provided'): string {
     return items && items.length > 0 ? items[0] : fallback;
   }

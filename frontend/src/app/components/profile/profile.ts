@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  ElementRef,
+  OnDestroy,
+  OnInit,
+  ViewChild,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -15,6 +23,9 @@ import { AuthService, UserProfile } from '../../services/auth.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Profile implements OnInit, OnDestroy {
+  @ViewChild('cameraVideo') cameraVideo?: ElementRef<HTMLVideoElement>;
+  @ViewChild('captureCanvas') captureCanvas?: ElementRef<HTMLCanvasElement>;
+
   readonly contactPreferences = [
     { label: 'Email', value: 'email' },
     { label: 'Phone', value: 'phone' },
@@ -38,9 +49,20 @@ export class Profile implements OnInit, OnDestroy {
 
   loading = true;
   saving = false;
+  imageUploading = false;
+  imageDeleting = false;
+  profileImageUrl = '';
+  imagePreviewUnavailable = true;
+  cameraSupported = false;
+  cameraActive = false;
+  cameraError = '';
+  capturedImagePreviewUrl = '';
+  mediaStream: MediaStream | null = null;
   errorMessage = '';
   successMessage = '';
   private destroy$ = new Subject<void>();
+  private pendingCameraFile: File | null = null;
+  private currentProfile: UserProfile | null = null;
 
   constructor(
     private readonly authService: AuthService,
@@ -48,10 +70,13 @@ export class Profile implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.cameraSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
     this.loadProfile();
   }
 
   ngOnDestroy(): void {
+    this.resetCameraState();
+    this.revokeProfileImageUrl();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -69,15 +94,18 @@ export class Profile implements OnInit, OnDestroy {
         next: (profile) => {
           this.patchProfile(profile);
           this.authService.applyProfile(profile);
+          this.currentProfile = profile;
           this.loading = false;
           this.profileForm.enable();
           this.profileForm.controls.username.disable();
           this.profileForm.controls.role.disable();
+          this.loadProfileImage(profile);
           this.cdr.markForCheck();
         },
         error: (err) => {
           this.errorMessage =
             err?.error?.message || 'Unable to load your profile. Please refresh and try again.';
+          this.currentProfile = null;
           this.loading = false;
           this.profileForm.enable();
           this.profileForm.controls.username.disable();
@@ -113,6 +141,7 @@ export class Profile implements OnInit, OnDestroy {
         next: (profile) => {
           this.patchProfile(profile);
           this.authService.applyProfile(profile);
+          this.currentProfile = profile;
           this.successMessage = 'Profile updated successfully.';
           this.saving = false;
           this.profileForm.enable();
@@ -132,6 +161,146 @@ export class Profile implements OnInit, OnDestroy {
       });
   }
 
+  onProfileImageSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] || null;
+    input.value = '';
+    if (file) {
+      this.uploadProfileImage(file);
+    }
+  }
+
+  async startCamera(): Promise<void> {
+    this.errorMessage = '';
+    this.successMessage = '';
+    this.cameraError = '';
+    this.pendingCameraFile = null;
+    this.revokeCapturedImagePreviewUrl();
+
+    if (!this.cameraSupported) {
+      this.cameraError = 'Camera capture is not available in this browser. You can still choose an image file.';
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.stopCameraStream();
+    this.cameraActive = true;
+    this.cdr.detectChanges();
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'user' } },
+      });
+      this.mediaStream = stream;
+
+      if (this.cameraVideo?.nativeElement) {
+        this.cameraVideo.nativeElement.srcObject = stream;
+        await this.cameraVideo.nativeElement.play().catch(() => undefined);
+      }
+    } catch {
+      this.stopCameraStream();
+      this.cameraActive = false;
+      this.cameraError = 'Unable to open the camera. Please allow camera access or choose a photo instead.';
+    }
+
+    this.cdr.markForCheck();
+  }
+
+  async capturePhoto(): Promise<void> {
+    const video = this.cameraVideo?.nativeElement;
+    const canvas = this.captureCanvas?.nativeElement;
+
+    if (!video || !canvas || !video.videoWidth || !video.videoHeight) {
+      this.cameraError = 'Camera preview is not ready yet. Please try again in a moment.';
+      this.cdr.markForCheck();
+      return;
+    }
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      this.cameraError = 'Unable to capture this photo. Please choose an image file instead.';
+      this.cdr.markForCheck();
+      return;
+    }
+
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, 'image/jpeg', 0.9);
+    });
+
+    if (!blob) {
+      this.cameraError = 'Unable to save this camera frame. Please try again or choose an image file.';
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.revokeCapturedImagePreviewUrl();
+    this.pendingCameraFile = new File([blob], `profile-photo-${Date.now()}.jpg`, {
+      type: 'image/jpeg',
+    });
+    this.capturedImagePreviewUrl = URL.createObjectURL(this.pendingCameraFile);
+    this.cameraActive = false;
+    this.stopCameraStream();
+    this.cdr.markForCheck();
+  }
+
+  retakePhoto(): void {
+    this.revokeCapturedImagePreviewUrl();
+    this.pendingCameraFile = null;
+    void this.startCamera();
+  }
+
+  cancelCamera(): void {
+    this.resetCameraState();
+    this.cdr.markForCheck();
+  }
+
+  useCapturedPhoto(): void {
+    if (!this.pendingCameraFile) {
+      this.cameraError = 'Capture a photo before using it for your profile.';
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.uploadProfileImage(this.pendingCameraFile);
+    this.resetCameraState();
+  }
+
+  deleteProfileImage(): void {
+    this.imageDeleting = true;
+    this.errorMessage = '';
+    this.successMessage = '';
+    this.cdr.markForCheck();
+
+    this.authService.deleteProfileImage()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (profile) => {
+          this.currentProfile = profile;
+          this.authService.applyProfile(profile);
+          this.revokeProfileImageUrl();
+          this.imagePreviewUnavailable = true;
+          this.successMessage = 'Profile photo removed.';
+          this.imageDeleting = false;
+          this.cdr.markForCheck();
+        },
+        error: (err) => {
+          this.errorMessage =
+            err?.error?.message || 'Unable to remove your profile photo. Please try again.';
+          this.imageDeleting = false;
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  profileInitials(): string {
+    const displayName = this.profileForm.controls.display_name.value || this.currentProfile?.display_name || '';
+    const username = this.profileForm.controls.username.value || this.currentProfile?.username || '';
+    return this.initialsForName(displayName || username);
+  }
+
   private patchProfile(profile: UserProfile): void {
     this.profileForm.patchValue({
       username: profile.username || '',
@@ -141,5 +310,113 @@ export class Profile implements OnInit, OnDestroy {
       display_name: profile.display_name || '',
       phone: profile.phone || '',
     });
+  }
+
+  private uploadProfileImage(file: File): void {
+    this.errorMessage = '';
+    this.successMessage = '';
+    this.cameraError = '';
+
+    if (file.size > 5 * 1024 * 1024) {
+      this.errorMessage = 'Please choose an image smaller than 5 MB.';
+      this.cdr.markForCheck();
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('image', file);
+    this.imageUploading = true;
+    this.cdr.markForCheck();
+
+    this.authService.uploadProfileImage(formData)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (profile) => {
+          this.currentProfile = profile;
+          this.authService.applyProfile(profile);
+          this.successMessage = 'Profile photo updated.';
+          this.imageUploading = false;
+          this.loadProfileImage(profile);
+          this.cdr.markForCheck();
+        },
+        error: (err) => {
+          this.errorMessage =
+            err?.error?.message || 'Unable to upload your profile photo. Initials avatar is still available.';
+          this.imageUploading = false;
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  private loadProfileImage(profile: UserProfile): void {
+    if (!profile.has_profile_image) {
+      this.revokeProfileImageUrl();
+      this.imagePreviewUnavailable = true;
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.authService.getProfileImage()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (imageBlob) => {
+          this.revokeProfileImageUrl();
+          this.profileImageUrl = URL.createObjectURL(imageBlob);
+          this.imagePreviewUnavailable = false;
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.revokeProfileImageUrl();
+          this.imagePreviewUnavailable = true;
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  private initialsForName(name: string): string {
+    const parts = name
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (parts.length === 0) {
+      return 'U';
+    }
+    if (parts.length === 1) {
+      return parts[0].charAt(0).toUpperCase() || 'U';
+    }
+    return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
+  }
+
+  private resetCameraState(): void {
+    this.stopCameraStream();
+    this.revokeCapturedImagePreviewUrl();
+    this.cameraActive = false;
+    this.cameraError = '';
+    this.pendingCameraFile = null;
+  }
+
+  private stopCameraStream(): void {
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach((track) => track.stop());
+      this.mediaStream = null;
+    }
+
+    if (this.cameraVideo?.nativeElement) {
+      this.cameraVideo.nativeElement.srcObject = null;
+    }
+  }
+
+  private revokeCapturedImagePreviewUrl(): void {
+    if (this.capturedImagePreviewUrl) {
+      URL.revokeObjectURL(this.capturedImagePreviewUrl);
+      this.capturedImagePreviewUrl = '';
+    }
+  }
+
+  private revokeProfileImageUrl(): void {
+    if (this.profileImageUrl) {
+      URL.revokeObjectURL(this.profileImageUrl);
+      this.profileImageUrl = '';
+    }
   }
 }

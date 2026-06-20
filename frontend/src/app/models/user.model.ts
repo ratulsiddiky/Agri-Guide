@@ -8,5 +8,6 @@ export interface User {
   created_at?: string;
   display_name?: string;
   phone?: string;
+  has_profile_image?: boolean;
   token?: string;
 }

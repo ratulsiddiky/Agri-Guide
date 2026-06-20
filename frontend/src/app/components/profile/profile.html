@@ -17,6 +17,88 @@
   }
 
   @if (!loading) {
+    <div class="card shadow-sm border-success profile-card profile-image-card mb-3">
+      <div class="card-body p-4">
+        <div class="profile-image-layout">
+          <div class="profile-avatar-preview" aria-label="Profile avatar preview">
+            @if (profileImageUrl && !imagePreviewUnavailable) {
+              <img [src]="profileImageUrl" alt="Current profile photo" />
+            } @else {
+              <span>{{ profileInitials() }}</span>
+            }
+          </div>
+
+          <div class="profile-image-actions">
+            <h3 class="h5 mb-1">Profile Picture</h3>
+            <p class="text-muted mb-3">Use a JPG, PNG, or WebP image up to 5 MB.</p>
+
+            <div class="d-flex flex-wrap gap-2">
+              <label class="btn btn-outline-success mb-0" for="profileImage">
+                Choose Photo
+              </label>
+              <input
+                id="profileImage"
+                class="visually-hidden"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                (change)="onProfileImageSelected($event)"
+                [disabled]="imageUploading || imageDeleting"
+              />
+              <button
+                class="btn btn-outline-success"
+                type="button"
+                (click)="startCamera()"
+                [disabled]="imageUploading || imageDeleting"
+              >
+                Take Photo
+              </button>
+              <button
+                class="btn btn-outline-danger"
+                type="button"
+                (click)="deleteProfileImage()"
+                [disabled]="imageUploading || imageDeleting || imagePreviewUnavailable"
+              >
+                Remove Photo
+              </button>
+            </div>
+
+            @if (imageUploading || imageDeleting) {
+              <div class="text-muted small mt-2">
+                {{ imageUploading ? 'Uploading profile photo...' : 'Removing profile photo...' }}
+              </div>
+            }
+
+            @if (cameraError) {
+              <div class="alert alert-info py-2 mt-3 mb-0">{{ cameraError }}</div>
+            }
+
+            @if (cameraActive) {
+              <div class="camera-panel">
+                <video #cameraVideo class="camera-preview" autoplay playsinline muted></video>
+                <div class="camera-actions d-flex flex-wrap gap-2">
+                  <button class="btn btn-success" type="button" (click)="capturePhoto()">Capture</button>
+                  <button class="btn btn-outline-secondary" type="button" (click)="cancelCamera()">Cancel</button>
+                </div>
+              </div>
+            }
+
+            @if (capturedImagePreviewUrl) {
+              <div class="camera-panel">
+                <img class="camera-preview" [src]="capturedImagePreviewUrl" alt="Captured profile preview" />
+                <div class="camera-actions d-flex flex-wrap gap-2">
+                  <button class="btn btn-outline-success" type="button" (click)="retakePhoto()">Retake</button>
+                  <button class="btn btn-outline-secondary" type="button" (click)="cancelCamera()">Cancel</button>
+                  <button class="btn btn-success" type="button" (click)="useCapturedPhoto()">Use Photo</button>
+                </div>
+              </div>
+            }
+
+            <canvas #captureCanvas hidden aria-hidden="true"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="card shadow-sm border-success profile-card">
       <div class="card-body p-4">
         <form [formGroup]="profileForm" (ngSubmit)="saveProfile()" novalidate>
