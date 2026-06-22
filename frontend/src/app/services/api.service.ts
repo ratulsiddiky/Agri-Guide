@@ -71,6 +71,56 @@ export interface DashboardSensorRow {
   status: string;
 }
 
+export interface DashboardWeatherSummary {
+  farm_id: string | null;
+  farm_name: string | null;
+  temperature_c: number | null;
+  humidity_percent: number | null;
+  wind_speed_kmh: number | null;
+  precipitation_mm: number | null;
+  rain_mm: number | null;
+  condition_summary: string;
+  timestamp: string;
+  data_source: 'latest_weather_log' | 'fallback_demo';
+}
+
+export interface DashboardLatestSensorReadings {
+  temperature_c: number | null;
+  humidity_percent: number | null;
+  soil_moisture_percent: number | null;
+  light_lux: number | null;
+  data_source: 'latest_sensor_reading' | 'fallback_demo';
+}
+
+export interface DashboardWeatherAlert {
+  level: string;
+  message: string;
+  recommended_action: string;
+  data_source: 'latest_weather_log' | 'fallback_demo';
+}
+
+export interface DashboardAiCropDetection {
+  scan_id: string | null;
+  mode: string;
+  model_mode: string | null;
+  ai_mode: string | null;
+  label: string;
+  confidence: number | null;
+  recommendation: string;
+  summary: string;
+  created_at: string;
+  data_source: 'latest_ai_scan' | 'fallback_demo';
+}
+
+export interface DashboardIrrigationDecision {
+  decision: string;
+  reason: string;
+  recommended_action: string;
+  priority: string;
+  soil_moisture_percent: number | null;
+  data_source: 'latest_sensor_reading' | 'fallback_demo';
+}
+
 export interface DashboardSummaryResponse {
   total_farms: number;
   total_sensors: number;
@@ -85,6 +135,11 @@ export interface DashboardSummaryResponse {
   longitude?: number;
   primary_farm_id?: string;
   timezone?: string;
+  weather?: DashboardWeatherSummary;
+  latest_sensor_readings?: DashboardLatestSensorReadings;
+  weather_alert?: DashboardWeatherAlert;
+  ai_crop_detection?: DashboardAiCropDetection;
+  irrigation_decision?: DashboardIrrigationDecision;
 }
 
 export interface SensorHistoryResponse {

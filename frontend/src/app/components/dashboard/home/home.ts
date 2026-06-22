@@ -6,13 +6,9 @@ import { catchError, takeUntil } from 'rxjs/operators';
 import { AuthService } from '../../../services/auth.service';
 import {
   ApiService,
-  CropDetectionResponse,
   DashboardSummaryResponse,
   FailoverTestResponse,
-  IrrigationDecisionResponse,
-  LatestSensorsResponse,
   SystemMetricsResponse,
-  WeatherAlertResponse,
 } from '../../../services/api.service';
 
 @Component({
@@ -32,15 +28,14 @@ export class Home implements OnInit, OnDestroy {
   isLoadingStats = true;
   private dashboardLocationSource: DashboardSummaryResponse['location_source'] | null = null;
   private dashboardTimezone: string | null = null;
-  private hasUserSummary = false;
   private destroy$ = new Subject<void>();
 
   kpiCards = [
     { label: 'Total Farms', value: this.totalFarms, detail: 'Currently tracked', tone: 'green' },
-    { label: 'Active Alerts', value: '2', detail: 'Needs attention', tone: 'amber' },
-    { label: 'Total Sensors', value: '12', detail: 'Across all farms', tone: 'blue' },
-    { label: 'Avg Soil Moisture', value: '58.4%', detail: 'Optimal range', tone: 'teal' },
-    { label: "Today's Forecast", value: '21°C', detail: 'Partly Cloudy', tone: 'sky' },
+    { label: 'Active Alerts', value: '...', detail: 'Needs attention', tone: 'amber' },
+    { label: 'Total Sensors', value: '...', detail: 'Across all farms', tone: 'blue' },
+    { label: 'Avg Soil Moisture', value: '...', detail: 'Awaiting readings', tone: 'teal' },
+    { label: "Today's Forecast", value: '...', detail: 'Awaiting synced weather', tone: 'sky' },
   ];
 
   smartFeatureCards = [
@@ -57,37 +52,37 @@ export class Home implements OnInit, OnDestroy {
       title: 'Latest Sensor Readings',
       accent: 'blue',
       metrics: [
-        { label: 'Temperature', value: '23.5°C' },
-        { label: 'Humidity', value: '64%' },
-        { label: 'Soil Moisture', value: '58.4%' },
-        { label: 'Light', value: '42,000 lux' },
+        { label: 'Temperature', value: 'No reading' },
+        { label: 'Humidity', value: 'No reading' },
+        { label: 'Soil Moisture', value: 'No reading' },
+        { label: 'Source', value: 'No readings yet' },
       ],
     },
     {
       title: 'Irrigation Decision',
       accent: 'teal',
       metrics: [
-        { label: 'Decision', value: 'No irrigation required' },
-        { label: 'Reason', value: 'Soil moisture is currently optimal' },
+        { label: 'Decision', value: 'Awaiting soil moisture data' },
+        { label: 'Reason', value: 'No readings yet' },
       ],
     },
     {
       title: 'AI Crop Detection',
       accent: 'lime',
       metrics: [
-        { label: 'Mode', value: 'Simulated AI' },
-        { label: 'Result', value: 'Healthy Leaf' },
-        { label: 'Confidence', value: '91%' },
-        { label: 'Recommendation', value: 'Continue normal monitoring' },
+        { label: 'Mode', value: 'No scan yet' },
+        { label: 'Result', value: 'No scans yet' },
+        { label: 'Confidence', value: 'N/A' },
+        { label: 'Recommendation', value: 'Upload a crop image to get AI guidance.' },
       ],
     },
     {
       title: 'Weather Alert',
       accent: 'amber',
       metrics: [
-        { label: 'Level', value: 'Medium' },
-        { label: 'Message', value: 'High temperature expected later today' },
-        { label: 'Action', value: 'Monitor soil moisture more frequently' },
+        { label: 'Level', value: 'None' },
+        { label: 'Message', value: 'No synced weather available yet' },
+        { label: 'Action', value: 'Sync weather from a farm detail page to see current alerts.' },
       ],
     },
     {
@@ -101,12 +96,7 @@ export class Home implements OnInit, OnDestroy {
     },
   ];
 
-  sensorRows = [
-    { sensor: 'SM-204', farm: 'North Field', type: 'Soil Moisture', value: '58.4%', status: 'Optimal' },
-    { sensor: 'TMP-118', farm: 'Greenhouse A', type: 'Temperature', value: '23.5°C', status: 'Normal' },
-    { sensor: 'HUM-072', farm: 'East Orchard', type: 'Humidity', value: '64%', status: 'Normal' },
-    { sensor: 'LUX-331', farm: 'South Plot', type: 'Light', value: '42,000 lux', status: 'High' },
-  ];
+  sensorRows: DashboardSummaryResponse['sensor_rows'] = [];
 
   get greetingName(): string {
     const user = this.authService.currentUserSignal();
@@ -174,30 +164,6 @@ export class Home implements OnInit, OnDestroy {
           return of(null as SystemMetricsResponse | null);
         })
       ),
-      sensors: this.apiService.getLatestSensors().pipe(
-        catchError((err) => {
-          console.error('Latest sensors load failed', err);
-          return of(null as LatestSensorsResponse | null);
-        })
-      ),
-      detection: this.apiService.detectCropDisease().pipe(
-        catchError((err) => {
-          console.error('Crop detection load failed', err);
-          return of(null as CropDetectionResponse | null);
-        })
-      ),
-      irrigation: this.apiService.getIrrigationDecision().pipe(
-        catchError((err) => {
-          console.error('Irrigation decision load failed', err);
-          return of(null as IrrigationDecisionResponse | null);
-        })
-      ),
-      weather: this.apiService.getWeatherAlert().pipe(
-        catchError((err) => {
-          console.error('Weather alert load failed', err);
-          return of(null as WeatherAlertResponse | null);
-        })
-      ),
       failover: this.apiService.getFailoverTest().pipe(
         catchError((err) => {
           console.error('Failover test load failed', err);
@@ -209,10 +175,6 @@ export class Home implements OnInit, OnDestroy {
       .subscribe((responses) => {
         this.applyDashboardSummary(responses.summary);
         this.applySystemMetrics(responses.system);
-        this.applyLatestSensors(responses.sensors);
-        this.applyCropDetection(responses.detection);
-        this.applyIrrigationDecision(responses.irrigation);
-        this.applyWeatherAlert(responses.weather);
         this.applyFailoverTest(responses.failover);
         this.cdr.markForCheck();
       });
@@ -251,7 +213,6 @@ export class Home implements OnInit, OnDestroy {
       return;
     }
 
-    this.hasUserSummary = true;
     this.dashboardLocationSource = summary.location_source ?? null;
     this.dashboardTimezone = summary.timezone ?? null;
     this.totalFarms = summary.total_farms;
@@ -268,29 +229,53 @@ export class Home implements OnInit, OnDestroy {
 
     this.updateKpiCard(
       "Today's Forecast",
-      summary.latest_temperature === null ? 'N/A' : `${summary.latest_temperature}°C`,
-      'Latest farm temperature'
+      this.formatNumberWithUnit(summary.weather?.temperature_c ?? summary.latest_temperature, '°C'),
+      summary.weather?.condition_summary || 'Latest farm temperature'
     );
 
+    const sensorReadings = summary.latest_sensor_readings;
     this.updateFeatureCard('Latest Sensor Readings', [
       {
         label: 'Temperature',
-        value: summary.latest_temperature === null ? 'No reading' : `${summary.latest_temperature}°C`,
+        value: this.formatNumberWithUnit(sensorReadings?.temperature_c ?? null, '°C', 'No reading'),
       },
       {
         label: 'Humidity',
-        value: summary.latest_humidity === null ? 'No reading' : `${summary.latest_humidity}%`,
+        value: this.formatNumberWithUnit(sensorReadings?.humidity_percent ?? summary.latest_humidity, '%', 'No reading'),
       },
       {
         label: 'Soil Moisture',
-        value: soilValue === null ? 'No reading' : `${soilValue}%`,
+        value: this.formatNumberWithUnit(sensorReadings?.soil_moisture_percent ?? soilValue, '%', 'No reading'),
       },
-      { label: 'Source', value: 'Your farms' },
+      {
+        label: 'Light',
+        value: this.formatNumberWithUnit(sensorReadings?.light_lux ?? null, ' lux', 'No reading'),
+      },
     ]);
 
+    const irrigation = summary.irrigation_decision;
     this.updateFeatureCard('Irrigation Decision', [
-      { label: 'Decision', value: summary.irrigation_recommendation },
-      { label: 'Basis', value: 'Average soil moisture' },
+      { label: 'Decision', value: irrigation?.decision ?? summary.irrigation_recommendation },
+      { label: 'Reason', value: irrigation?.reason ?? 'Average soil moisture' },
+      { label: 'Priority', value: irrigation?.priority ?? 'low' },
+    ]);
+
+    const aiScan = summary.ai_crop_detection;
+    this.updateFeatureCard('AI Crop Detection', [
+      { label: 'Mode', value: this.formatAiMode(aiScan) },
+      { label: 'Result', value: aiScan?.label ?? 'No scans yet' },
+      { label: 'Confidence', value: this.formatConfidence(aiScan?.confidence ?? null) },
+      { label: 'Recommendation', value: aiScan?.recommendation ?? 'Upload a crop image to get AI guidance.' },
+    ]);
+
+    const weatherAlert = summary.weather_alert;
+    this.updateFeatureCard('Weather Alert', [
+      { label: 'Level', value: weatherAlert?.level ?? 'None' },
+      { label: 'Message', value: weatherAlert?.message ?? 'No synced weather available yet' },
+      {
+        label: 'Action',
+        value: weatherAlert?.recommended_action ?? 'Sync weather from a farm detail page to see current alerts.',
+      },
     ]);
 
     if (summary.sensor_rows.length > 0) {
@@ -320,102 +305,6 @@ export class Home implements OnInit, OnDestroy {
     return new Date().getHours();
   }
 
-  private applyLatestSensors(sensors: LatestSensorsResponse | null): void {
-    if (!sensors) {
-      return;
-    }
-
-    if (this.hasUserSummary) {
-      return;
-    }
-
-    this.updateFeatureCard('Latest Sensor Readings', [
-      { label: 'Temperature', value: `${sensors.temperature_c}°C` },
-      { label: 'Humidity', value: `${sensors.humidity_percent}%` },
-      { label: 'Soil Moisture', value: `${sensors.soil_moisture_percent}%` },
-      { label: 'Light', value: `${sensors.light_lux.toLocaleString()} lux` },
-    ]);
-
-    this.updateKpiCard('Avg Soil Moisture', `${sensors.soil_moisture_percent}%`, sensors.status);
-    this.updateKpiCard("Today's Forecast", `${sensors.temperature_c}°C`, 'Current sensor temperature');
-
-    this.sensorRows = [
-      {
-        sensor: 'TMP-LIVE',
-        farm: sensors.farm_id,
-        type: 'Temperature',
-        value: `${sensors.temperature_c}°C`,
-        status: sensors.status,
-      },
-      {
-        sensor: 'HUM-LIVE',
-        farm: sensors.farm_id,
-        type: 'Humidity',
-        value: `${sensors.humidity_percent}%`,
-        status: sensors.status,
-      },
-      {
-        sensor: 'SM-LIVE',
-        farm: sensors.farm_id,
-        type: 'Soil Moisture',
-        value: `${sensors.soil_moisture_percent}%`,
-        status: sensors.status,
-      },
-      {
-        sensor: 'LUX-LIVE',
-        farm: sensors.farm_id,
-        type: 'Light',
-        value: `${sensors.light_lux.toLocaleString()} lux`,
-        status: sensors.source,
-      },
-    ];
-  }
-
-  private applyIrrigationDecision(irrigation: IrrigationDecisionResponse | null): void {
-    if (!irrigation) {
-      return;
-    }
-
-    if (this.hasUserSummary) {
-      return;
-    }
-
-    this.updateFeatureCard('Irrigation Decision', [
-      { label: 'Decision', value: irrigation.decision },
-      { label: 'Reason', value: irrigation.rule_used },
-      { label: 'Action', value: irrigation.recommended_action },
-    ]);
-  }
-
-  private applyCropDetection(detection: CropDetectionResponse | null): void {
-    if (!detection) {
-      return;
-    }
-
-    this.updateFeatureCard('AI Crop Detection', [
-      { label: 'Mode', value: detection.mode },
-      { label: 'Result', value: detection.prediction.label },
-      { label: 'Confidence', value: `${Math.round(detection.prediction.confidence * 100)}%` },
-      { label: 'Recommendation', value: detection.prediction.recommendation },
-    ]);
-  }
-
-  private applyWeatherAlert(weather: WeatherAlertResponse | null): void {
-    if (!weather) {
-      return;
-    }
-
-    this.updateFeatureCard('Weather Alert', [
-      { label: 'Level', value: weather.alert_level },
-      { label: 'Message', value: weather.message },
-      { label: 'Action', value: weather.recommended_action },
-    ]);
-
-    if (!this.hasUserSummary) {
-      this.updateKpiCard('Active Alerts', weather.alert_level === 'Medium' ? '2' : '1', weather.message);
-    }
-  }
-
   private applyFailoverTest(failover: FailoverTestResponse | null): void {
     if (!failover) {
       return;
@@ -426,5 +315,34 @@ export class Home implements OnInit, OnDestroy {
       { label: 'Mode', value: failover.failover_mode },
       { label: 'Confidence', value: failover.confidence },
     ]);
+  }
+
+  private formatNumberWithUnit(value: number | null | undefined, unit: string, fallback = 'N/A'): string {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      return fallback;
+    }
+    const displayValue = unit.trim() === 'lux' ? value.toLocaleString() : value;
+    return `${displayValue}${unit}`;
+  }
+
+  private formatConfidence(value: number | null): string {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      return 'N/A';
+    }
+    return `${Math.round(value * 100)}%`;
+  }
+
+  private formatAiMode(aiScan: DashboardSummaryResponse['ai_crop_detection'] | undefined): string {
+    if (!aiScan || aiScan.data_source === 'fallback_demo') {
+      return 'No scan yet';
+    }
+    const mode = aiScan.ai_mode || aiScan.model_mode || aiScan.mode;
+    if (mode === 'custom_trained_model' || mode === 'custom_trained_model_uncertain') {
+      return 'Custom AI';
+    }
+    if (mode === 'simulated_ai') {
+      return 'Simulated AI';
+    }
+    return aiScan.mode || 'No scan yet';
   }
 }

@@ -1,4 +1,5 @@
 from base64 import b64encode
+from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import mongomock
@@ -467,6 +468,185 @@ def test_dashboard_summary_only_includes_current_user_farms_and_sensors(client):
     assert payload["longitude"] == -5.9301
     assert payload["primary_farm_id"] == owned_farm_id
     assert "timezone" not in payload
+
+
+def test_dashboard_summary_uses_latest_synced_weather_log(client, monkeypatch):
+    token = _login_token(client, username="weather_owner")
+    owner = config.get_db().users.find_one({"username": "weather_owner"})
+    farm_id = str(
+        config.get_db().farms.insert_one(
+            {
+                "farm_name": "Synced Weather Farm",
+                "owner_id": owner["_id"],
+                "latitude": 54.5973,
+                "longitude": -5.9301,
+                "sensors": [],
+                "weather_logs": [],
+                "alerts_history": [],
+            }
+        ).inserted_id
+    )
+
+    class _FakeWeatherResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"current_weather": {"temperature": 19.4, "windspeed": 17.6}}
+
+    monkeypatch.setattr(farms_routes.requests, "get", lambda *args, **kwargs: _FakeWeatherResponse())
+
+    sync_response = client.post(
+        f"/api/farms/{farm_id}/sync_weather",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert sync_response.status_code == 200
+
+    summary_response = client.get(
+        "/api/dashboard/summary",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert summary_response.status_code == 200
+    payload = summary_response.get_json()
+    assert payload["latest_temperature"] == 19.4
+    assert payload["weather"]["data_source"] == "latest_weather_log"
+    assert payload["weather"]["temperature_c"] == 19.4
+    assert payload["weather"]["wind_speed_kmh"] == 17.6
+    assert payload["weather"]["farm_id"] == farm_id
+    assert payload["weather_alert"]["data_source"] == "latest_weather_log"
+
+
+def test_dashboard_summary_uses_latest_ai_scan_for_current_user(client):
+    token = _login_token(client, username="scan_owner")
+    _login_token(client, username="other_scan_owner")
+    owner = config.get_db().users.find_one({"username": "scan_owner"})
+    other = config.get_db().users.find_one({"username": "other_scan_owner"})
+    now = datetime.now(timezone.utc)
+    config.get_db().ai_scans.insert_many(
+        [
+            {
+                "user_id": str(owner["_id"]),
+                "prediction": {"label": "Healthy Leaf", "confidence": 0.91, "recommendation": "Old demo"},
+                "recommendation": "Old demo",
+                "model_mode": "simulated_ai",
+                "ai_mode": "simulated_ai",
+                "created_at": now - timedelta(hours=2),
+            },
+            {
+                "user_id": str(owner["_id"]),
+                "prediction": {
+                    "label": "Tomato early blight",
+                    "confidence": 0.968,
+                    "recommendation": "Remove affected lower leaves.",
+                },
+                "recommendation": "Remove affected lower leaves.",
+                "explanation": "The image is most consistent with tomato early blight.",
+                "model_mode": "custom_trained_model",
+                "ai_mode": "custom_trained_model",
+                "created_at": now,
+            },
+            {
+                "user_id": str(other["_id"]),
+                "prediction": {"label": "Other user disease", "confidence": 0.99},
+                "recommendation": "Private other-user advice",
+                "model_mode": "custom_trained_model",
+                "ai_mode": "custom_trained_model",
+                "created_at": now + timedelta(hours=1),
+            },
+        ]
+    )
+
+    response = client.get(
+        "/api/dashboard/summary",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    ai_card = payload["ai_crop_detection"]
+    assert ai_card["data_source"] == "latest_ai_scan"
+    assert ai_card["label"] == "Tomato early blight"
+    assert ai_card["confidence"] == 0.968
+    assert ai_card["model_mode"] == "custom_trained_model"
+    assert ai_card["ai_mode"] == "custom_trained_model"
+    assert ai_card["recommendation"] == "Remove affected lower leaves."
+    assert ai_card["label"] != "Healthy Leaf"
+    assert ai_card["label"] != "Other user disease"
+
+
+def test_dashboard_summary_does_not_leak_other_user_weather_or_scan_data(client):
+    token = _login_token(client, username="private_owner")
+    _login_token(client, username="other_private_owner")
+    owner = config.get_db().users.find_one({"username": "private_owner"})
+    other = config.get_db().users.find_one({"username": "other_private_owner"})
+    now = datetime.now(timezone.utc)
+    config.get_db().farms.insert_many(
+        [
+            {
+                "farm_name": "Owned Farm",
+                "owner_id": owner["_id"],
+                "sensors": [],
+                "weather_logs": [{"timestamp": now, "temperature_celsius": 18.0, "windspeed": 5.0}],
+                "alerts_history": [],
+            },
+            {
+                "farm_name": "Other Farm",
+                "owner_id": other["_id"],
+                "sensors": [],
+                "weather_logs": [{"timestamp": now + timedelta(hours=1), "temperature_celsius": 41.0, "windspeed": 44.0}],
+                "alerts_history": [],
+            },
+        ]
+    )
+    config.get_db().ai_scans.insert_one(
+        {
+            "user_id": str(other["_id"]),
+            "prediction": {"label": "Other user private scan", "confidence": 0.99},
+            "recommendation": "Private advice",
+            "created_at": now,
+        }
+    )
+
+    response = client.get(
+        "/api/dashboard/summary",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["total_farms"] == 1
+    assert payload["weather"]["temperature_c"] == 18.0
+    assert payload["ai_crop_detection"]["data_source"] == "fallback_demo"
+    assert payload["ai_crop_detection"]["label"] == "No scans yet"
+
+
+def test_dashboard_summary_returns_safe_fallbacks_without_weather_or_scans(client):
+    token = _login_token(client, username="fallback_owner")
+    owner = config.get_db().users.find_one({"username": "fallback_owner"})
+    config.get_db().farms.insert_one(
+        {
+            "farm_name": "Empty Farm",
+            "owner_id": owner["_id"],
+            "sensors": [],
+            "weather_logs": [],
+            "alerts_history": [],
+        }
+    )
+
+    response = client.get(
+        "/api/dashboard/summary",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["weather"]["data_source"] == "fallback_demo"
+    assert payload["weather"]["temperature_c"] is None
+    assert payload["latest_sensor_readings"]["data_source"] == "fallback_demo"
+    assert payload["ai_crop_detection"]["data_source"] == "fallback_demo"
+    assert payload["ai_crop_detection"]["label"] == "No scans yet"
+    assert payload["irrigation_decision"]["data_source"] == "fallback_demo"
 
 
 def test_farm_sensors_endpoint_works_for_owner(client):

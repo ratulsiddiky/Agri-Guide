@@ -208,6 +208,29 @@ def _iso_timestamp(value):
     return str(value or "")
 
 
+def _timestamp_sort_value(value):
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+    if isinstance(value, str) and value:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=timezone.utc)
+            return parsed
+        except ValueError:
+            return datetime.min.replace(tzinfo=timezone.utc)
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _first_present(*values):
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
 def _sensor_reading_points(sensor):
     readings = sensor.get("readings", [])
     points = []
@@ -477,6 +500,208 @@ def _select_primary_farm(farms):
 
     candidates = exact_coordinate_farms or farms
     return max(candidates, key=_farm_sort_key)
+
+
+def _latest_weather_log(farm):
+    weather_logs = farm.get("weather_logs", [])
+    if not isinstance(weather_logs, list) or not weather_logs:
+        return None
+    logs = [log for log in weather_logs if isinstance(log, dict)]
+    if not logs:
+        return None
+    return max(logs, key=lambda log: _timestamp_sort_value(log.get("timestamp") or log.get("time")))
+
+
+def _dashboard_weather_payload(farm):
+    if not farm:
+        return {
+            "farm_id": None,
+            "farm_name": None,
+            "temperature_c": None,
+            "humidity_percent": None,
+            "wind_speed_kmh": None,
+            "precipitation_mm": None,
+            "rain_mm": None,
+            "condition_summary": "No weather logs yet",
+            "timestamp": "",
+            "data_source": "fallback_demo",
+        }
+
+    latest_log = _latest_weather_log(farm)
+    if not latest_log:
+        return {
+            "farm_id": str(farm.get("_id")),
+            "farm_name": farm.get("farm_name", "Farm"),
+            "temperature_c": None,
+            "humidity_percent": None,
+            "wind_speed_kmh": None,
+            "precipitation_mm": None,
+            "rain_mm": None,
+            "condition_summary": "No synced weather yet",
+            "timestamp": "",
+            "data_source": "fallback_demo",
+        }
+
+    weather_code = latest_log.get("weather_code")
+    conditions = latest_log.get("conditions") or latest_log.get("condition_summary")
+    condition_summary = conditions or _weather_condition_summary(weather_code)
+    return {
+        "farm_id": str(farm.get("_id")),
+        "farm_name": farm.get("farm_name", "Farm"),
+        "temperature_c": _to_float(
+            _first_present(latest_log.get("temperature_c"), latest_log.get("temperature_celsius"), latest_log.get("temperature"))
+        ),
+        "humidity_percent": _to_float(
+            _first_present(latest_log.get("humidity_percent"), latest_log.get("relative_humidity_2m"), latest_log.get("humidity"))
+        ),
+        "wind_speed_kmh": _to_float(
+            _first_present(latest_log.get("wind_speed_kmh"), latest_log.get("windspeed"), latest_log.get("wind_speed"))
+        ),
+        "precipitation_mm": _to_float(
+            _first_present(latest_log.get("precipitation_mm"), latest_log.get("precipitation"))
+        ),
+        "rain_mm": _to_float(_first_present(latest_log.get("rain_mm"), latest_log.get("rain"))),
+        "condition_summary": condition_summary,
+        "timestamp": _iso_timestamp(latest_log.get("timestamp") or latest_log.get("time")),
+        "data_source": "latest_weather_log",
+    }
+
+
+def _latest_sensor_entry(sensor):
+    latest_reading = _latest_sensor_reading(sensor)
+    if not latest_reading:
+        return {
+            "value": sensor.get("value"),
+            "unit": sensor.get("unit", ""),
+            "timestamp": sensor.get("timestamp"),
+            "source": sensor.get("source"),
+        }
+    return {
+        "value": latest_reading.get("value"),
+        "unit": latest_reading.get("unit") or sensor.get("unit", ""),
+        "timestamp": latest_reading.get("timestamp") or sensor.get("timestamp"),
+        "source": latest_reading.get("source") or sensor.get("source"),
+    }
+
+
+def _dashboard_sensor_payload(sensor_map):
+    def sensor_value(sensor_type):
+        sensor = sensor_map.get(sensor_type)
+        if not sensor:
+            return None
+        return _to_float(_latest_sensor_entry(sensor).get("value"))
+
+    has_sensor_data = any(sensor_map.values())
+    return {
+        "temperature_c": sensor_value("temperature"),
+        "humidity_percent": sensor_value("humidity"),
+        "soil_moisture_percent": sensor_value("soil_moisture"),
+        "light_lux": sensor_value("light"),
+        "data_source": "latest_sensor_reading" if has_sensor_data else "fallback_demo",
+    }
+
+
+def _dashboard_weather_alert(weather):
+    if weather.get("data_source") != "latest_weather_log":
+        return {
+            "level": "None",
+            "message": "No synced weather available yet",
+            "recommended_action": "Sync weather from a farm detail page to see current alerts.",
+            "data_source": "fallback_demo",
+        }
+
+    temperature = weather.get("temperature_c")
+    wind = weather.get("wind_speed_kmh")
+    precipitation = weather.get("precipitation_mm") or weather.get("rain_mm") or 0
+
+    if wind is not None and wind >= 40:
+        return {
+            "level": "High",
+            "message": "High wind conditions detected from latest synced weather.",
+            "recommended_action": "Secure lightweight equipment and inspect exposed crops.",
+            "data_source": "latest_weather_log",
+        }
+    if precipitation >= 10:
+        return {
+            "level": "High",
+            "message": "Heavy precipitation detected from latest synced weather.",
+            "recommended_action": "Check drainage and delay irrigation.",
+            "data_source": "latest_weather_log",
+        }
+    if temperature is not None and temperature >= 30:
+        return {
+            "level": "Medium",
+            "message": "High temperature detected from latest synced weather.",
+            "recommended_action": "Monitor soil moisture more frequently.",
+            "data_source": "latest_weather_log",
+        }
+
+    return {
+        "level": "Low",
+        "message": weather.get("condition_summary") or "No urgent weather alert.",
+        "recommended_action": "Continue routine monitoring.",
+        "data_source": "latest_weather_log",
+    }
+
+
+def _dashboard_ai_scan_payload(current_user):
+    latest_scan = config.get_db().ai_scans.find_one(
+        {"user_id": str(current_user["_id"])},
+        sort=[("created_at", -1)],
+    )
+    if not latest_scan:
+        return {
+            "scan_id": None,
+            "mode": "No scan yet",
+            "model_mode": None,
+            "ai_mode": None,
+            "label": "No scans yet",
+            "confidence": None,
+            "recommendation": "Upload a crop image to get AI guidance.",
+            "summary": "",
+            "created_at": "",
+            "data_source": "fallback_demo",
+        }
+
+    prediction = latest_scan.get("prediction", {})
+    model_mode = latest_scan.get("model_mode", "simulated_ai")
+    ai_mode = latest_scan.get("ai_mode") or model_mode
+    return {
+        "scan_id": str(latest_scan.get("_id")),
+        "mode": ai_mode,
+        "model_mode": model_mode,
+        "ai_mode": ai_mode,
+        "label": prediction.get("label") or latest_scan.get("diagnosis") or "AI scan available",
+        "confidence": prediction.get("confidence"),
+        "recommendation": latest_scan.get("recommendation") or prediction.get("recommendation") or "Review the latest scan details.",
+        "summary": latest_scan.get("explanation") or prediction.get("summary") or "",
+        "created_at": _iso_timestamp(latest_scan.get("created_at")),
+        "data_source": "latest_ai_scan",
+    }
+
+
+def _dashboard_irrigation_payload(average_soil_moisture, recommendation, has_sensor_data):
+    if average_soil_moisture is None:
+        priority = "medium"
+        reason = "No soil moisture reading is available."
+    elif average_soil_moisture < 45:
+        priority = "high"
+        reason = f"Average soil moisture is low at {average_soil_moisture}%."
+    elif average_soil_moisture > 70:
+        priority = "low"
+        reason = f"Average soil moisture is above target at {average_soil_moisture}%."
+    else:
+        priority = "low"
+        reason = f"Average soil moisture is in range at {average_soil_moisture}%."
+
+    return {
+        "decision": recommendation,
+        "reason": reason,
+        "recommended_action": recommendation,
+        "priority": priority,
+        "soil_moisture_percent": average_soil_moisture,
+        "data_source": "latest_sensor_reading" if has_sensor_data else "fallback_demo",
+    }
 
 
 def _extract_farm_timezone(farm):
@@ -1214,6 +1439,7 @@ def get_dashboard_summary(current_user):
     humidity_sensors = []
     active_alerts_count = 0
     sensor_rows = []
+    sensors_by_type = {}
 
     for farm in farms:
         farm_name = farm.get("farm_name", "Farm")
@@ -1230,6 +1456,12 @@ def get_dashboard_summary(current_user):
                 temperature_sensors.append(sensor)
             if sensor_type == "humidity":
                 humidity_sensors.append(sensor)
+            if sensor_type and (
+                sensor_type not in sensors_by_type
+                or _timestamp_sort_value(_sensor_timestamp(sensor))
+                > _timestamp_sort_value(_sensor_timestamp(sensors_by_type[sensor_type]))
+            ):
+                sensors_by_type[sensor_type] = sensor
             sensor_rows.append(
                 {
                     "sensor": sensor.get("sensor_id", "Unknown"),
@@ -1243,9 +1475,16 @@ def get_dashboard_summary(current_user):
     average_soil_moisture = round(sum(soil_values) / len(soil_values), 1) if soil_values else None
     latest_temperature_sensor = max(temperature_sensors, key=_sensor_timestamp, default=None)
     latest_humidity_sensor = max(humidity_sensors, key=_sensor_timestamp, default=None)
-    latest_temperature = _sensor_numeric_value(latest_temperature_sensor) if latest_temperature_sensor else None
+    sensor_latest_temperature = _sensor_numeric_value(latest_temperature_sensor) if latest_temperature_sensor else None
     latest_humidity = _sensor_numeric_value(latest_humidity_sensor) if latest_humidity_sensor else None
     primary_farm = _select_primary_farm(farms)
+    weather_payload = _dashboard_weather_payload(primary_farm)
+    sensor_payload = _dashboard_sensor_payload(sensors_by_type)
+    latest_temperature = weather_payload.get("temperature_c")
+    if latest_temperature is None:
+        latest_temperature = sensor_latest_temperature
+    if latest_humidity is None:
+        latest_humidity = weather_payload.get("humidity_percent")
 
     if average_soil_moisture is None:
         irrigation_recommendation = "Add soil moisture sensors to calculate irrigation guidance."
@@ -1265,6 +1504,15 @@ def get_dashboard_summary(current_user):
         "active_alerts_count": active_alerts_count,
         "irrigation_recommendation": irrigation_recommendation,
         "sensor_rows": sensor_rows[:8],
+        "weather": weather_payload,
+        "latest_sensor_readings": sensor_payload,
+        "weather_alert": _dashboard_weather_alert(weather_payload),
+        "ai_crop_detection": _dashboard_ai_scan_payload(current_user),
+        "irrigation_decision": _dashboard_irrigation_payload(
+            average_soil_moisture,
+            irrigation_recommendation,
+            sensor_payload["data_source"] == "latest_sensor_reading",
+        ),
     }
 
     if primary_farm:
