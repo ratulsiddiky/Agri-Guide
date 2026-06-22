@@ -66,6 +66,7 @@
             <th>Farm</th>
             <th>Type</th>
             <th>Value</th>
+            <th>Source</th>
             <th>Status</th>
           </tr>
         </thead>
@@ -76,11 +77,12 @@
               <td>{{ row.farm }}</td>
               <td>{{ row.type }}</td>
               <td>{{ row.value }}</td>
+              <td><span class="reading-source">{{ row.source_label || row.source || 'Unknown source' }}</span></td>
               <td><span class="reading-status">{{ row.status }}</span></td>
             </tr>
           } @empty {
             <tr>
-              <td colspan="5">No farm sensors yet. Create a farm to generate demo readings.</td>
+              <td colspan="6">No farm sensors yet. Create a farm to generate demo readings.</td>
             </tr>
           }
         </tbody>

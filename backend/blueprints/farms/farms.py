@@ -117,14 +117,43 @@ def _sensor_timestamp(sensor):
 
 
 def _format_sensor_value(sensor):
-    value = sensor.get("value")
-    readings = sensor.get("readings", [])
-    if value is None and isinstance(readings, list) and readings:
-        latest = readings[-1]
-        if isinstance(latest, dict):
-            value = latest.get("value")
-    unit = sensor.get("unit", "")
-    return f"{value}{unit}" if value is not None else "No reading"
+    latest = _latest_sensor_reading(sensor)
+    value = latest.get("value") if latest else sensor.get("value")
+    unit = (latest.get("unit") if latest else None) or sensor.get("unit", "")
+    if value is None:
+        return "No reading"
+
+    unit = str(unit or "").strip()
+    try:
+        numeric_value = float(value)
+        if unit == "lux":
+            display_value = f"{numeric_value:,.0f}"
+        else:
+            display_value = str(value)
+    except (TypeError, ValueError):
+        display_value = str(value)
+
+    if not unit:
+        return display_value
+    if unit in {"%", "°C"}:
+        return f"{display_value}{unit}"
+    return f"{display_value} {unit}"
+
+
+def _sensor_source(sensor):
+    latest = _latest_sensor_reading(sensor)
+    source = latest.get("source") if latest else None
+    return source or sensor.get("source") or ""
+
+
+def _sensor_source_label(source):
+    labels = {
+        "auto_generated_demo_sensor": "Demo sensor",
+        "manual_sensor_reading": "Manual reading",
+        "iot_sensor": "IoT sensor",
+        "live_sensor": "IoT sensor",
+    }
+    return labels.get(str(source or "").strip(), "Unknown source")
 
 
 def _latest_sensor_reading(sensor):
@@ -1462,6 +1491,7 @@ def get_dashboard_summary(current_user):
                 > _timestamp_sort_value(_sensor_timestamp(sensors_by_type[sensor_type]))
             ):
                 sensors_by_type[sensor_type] = sensor
+            source = _sensor_source(sensor)
             sensor_rows.append(
                 {
                     "sensor": sensor.get("sensor_id", "Unknown"),
@@ -1469,6 +1499,8 @@ def get_dashboard_summary(current_user):
                     "type": sensor.get("type", "Unknown"),
                     "value": _format_sensor_value(sensor),
                     "status": str(sensor.get("status", "unknown")),
+                    "source": source,
+                    "source_label": _sensor_source_label(source),
                 }
             )
 

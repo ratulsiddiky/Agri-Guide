@@ -470,6 +470,87 @@ def test_dashboard_summary_only_includes_current_user_farms_and_sensors(client):
     assert "timezone" not in payload
 
 
+def test_dashboard_summary_sensor_rows_include_source_labels_and_clean_units(client):
+    token = _login_token(client, username="source_owner")
+    owner = config.get_db().users.find_one({"username": "source_owner"})
+    config.get_db().farms.insert_one(
+        {
+            "farm_name": "Source Farm",
+            "owner_id": owner["_id"],
+            "alerts_history": [],
+            "weather_logs": [],
+            "sensors": [
+                {
+                    "sensor_id": "lux-demo",
+                    "type": "light",
+                    "value": 34599,
+                    "unit": "lux",
+                    "status": "active",
+                    "source": "auto_generated_demo_sensor",
+                },
+                {
+                    "sensor_id": "ph-manual",
+                    "type": "ph",
+                    "value": 5.8,
+                    "unit": "pH",
+                    "status": "active",
+                    "source": "auto_generated_demo_sensor",
+                    "readings": [
+                        {
+                            "value": "6.0",
+                            "unit": "pH",
+                            "source": "manual_sensor_reading",
+                        }
+                    ],
+                },
+                {
+                    "sensor_id": "temp-iot",
+                    "type": "temperature",
+                    "value": 23.9,
+                    "unit": "°C",
+                    "status": "active",
+                    "source": "iot_sensor",
+                },
+                {
+                    "sensor_id": "soil-live",
+                    "type": "soil_moisture",
+                    "value": 58,
+                    "unit": "%",
+                    "status": "active",
+                    "source": "live_sensor",
+                },
+                {
+                    "sensor_id": "unknown-source",
+                    "type": "humidity",
+                    "value": 64,
+                    "unit": "%",
+                    "status": "active",
+                },
+            ],
+        }
+    )
+
+    response = client.get(
+        "/api/dashboard/summary",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    rows = {row["sensor"]: row for row in response.get_json()["sensor_rows"]}
+    assert rows["lux-demo"]["value"] == "34,599 lux"
+    assert rows["lux-demo"]["source"] == "auto_generated_demo_sensor"
+    assert rows["lux-demo"]["source_label"] == "Demo sensor"
+    assert rows["ph-manual"]["value"] == "6.0 pH"
+    assert rows["ph-manual"]["source"] == "manual_sensor_reading"
+    assert rows["ph-manual"]["source_label"] == "Manual reading"
+    assert rows["temp-iot"]["value"] == "23.9°C"
+    assert rows["temp-iot"]["source_label"] == "IoT sensor"
+    assert rows["soil-live"]["value"] == "58%"
+    assert rows["soil-live"]["source_label"] == "IoT sensor"
+    assert rows["unknown-source"]["source"] == ""
+    assert rows["unknown-source"]["source_label"] == "Unknown source"
+
+
 def test_dashboard_summary_uses_latest_synced_weather_log(client, monkeypatch):
     token = _login_token(client, username="weather_owner")
     owner = config.get_db().users.find_one({"username": "weather_owner"})

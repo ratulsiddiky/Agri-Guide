@@ -33,7 +33,17 @@ describe('Home', () => {
           latest_humidity: 64,
           active_alerts_count: 0,
           irrigation_recommendation: 'No irrigation required',
-          sensor_rows: [],
+          sensor_rows: [
+            {
+              sensor: 'lux-demo',
+              farm: 'Weather Farm',
+              type: 'light',
+              value: '34,599 lux',
+              status: 'active',
+              source: 'auto_generated_demo_sensor',
+              source_label: 'Demo sensor',
+            },
+          ],
           weather: {
             farm_id: 'farm-1',
             farm_name: 'Weather Farm',
@@ -187,5 +197,15 @@ describe('Home', () => {
     expect(aiCard?.metrics[0]).toEqual({ label: 'Mode', value: 'No scan yet' });
     expect(aiCard?.metrics[1]).toEqual({ label: 'Result', value: 'No scans yet' });
     expect(aiCard?.metrics[2]).toEqual({ label: 'Confidence', value: 'N/A' });
+  });
+
+  it('should render recent sensor reading source labels', () => {
+    fixture.detectChanges();
+    const tableText = fixture.nativeElement.querySelector('.table-card')?.textContent ?? '';
+
+    expect(component.sensorRows[0].value).toBe('34,599 lux');
+    expect(component.sensorRows[0].source_label).toBe('Demo sensor');
+    expect(tableText).toContain('Source');
+    expect(tableText).toContain('Demo sensor');
   });
 });

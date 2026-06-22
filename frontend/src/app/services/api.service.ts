@@ -69,6 +69,8 @@ export interface DashboardSensorRow {
   type: string;
   value: string;
   status: string;
+  source?: string;
+  source_label?: string;
 }
 
 export interface DashboardWeatherSummary {

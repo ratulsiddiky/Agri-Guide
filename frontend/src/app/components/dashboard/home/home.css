@@ -286,7 +286,7 @@
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 680px;
+  min-width: 780px;
 }
 
 th,
@@ -314,16 +314,25 @@ tbody tr:last-child td {
   border-bottom: 0;
 }
 
-.reading-status {
+.reading-status,
+.reading-source {
   display: inline-flex;
   align-items: center;
   min-height: 30px;
   padding: 0.3rem 0.65rem;
   border-radius: 999px;
-  background: #e9f8ef;
-  color: #13734f;
   font-size: 0.82rem;
   font-weight: 800;
+}
+
+.reading-status {
+  background: #e9f8ef;
+  color: #13734f;
+}
+
+.reading-source {
+  background: #eef6ff;
+  color: #1d5f8f;
 }
 
 @media (max-width: 1180px) {
