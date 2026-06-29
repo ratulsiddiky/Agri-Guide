@@ -3,7 +3,7 @@
     <div>
       <p class="eyebrow">AI Crop Scan</p>
       <h1>Scan detail</h1>
-      <p>Review the saved diagnosis, confidence score, and crop health recommendations.</p>
+      <p>Review the saved diagnosis, model probability, and crop health recommendations.</p>
     </div>
     <a routerLink="/ai/crop-scan" class="btn btn-outline-success btn-sm">Back to scan history</a>
   </section>
@@ -52,8 +52,13 @@
           </div>
         }
 
+        <div class="disclaimer-box image-note">
+          <strong>Supported images</strong>
+          <p>Tomato, potato, and pepper bell leaf images only.</p>
+        </div>
+
         <div class="metric-row">
-          <span>{{ isUncertainScan(scan) ? 'Final confidence' : 'Confidence' }}</span>
+          <span>Model probability</span>
           <strong>{{ confidencePercent(scan) }}</strong>
         </div>
         <div class="metric-row">
@@ -155,9 +160,9 @@
         </div>
 
         <div>
-          <h4>Confidence explanation</h4>
+          <h4>Model probability explanation</h4>
           <p class="advice-copy">
-            {{ scan.confidence_explanation || 'Confidence reflects the model’s simulated assessment of the image.' }}
+            {{ scan.confidence_explanation || 'Model probability reflects the model assessment of the image.' }}
           </p>
         </div>
 
@@ -192,7 +197,8 @@
 
       <div class="disclaimer-box">
         <strong>Advisory disclaimer</strong>
-        <p>{{ scan.disclaimer || scan.advisory_disclaimer || 'AI-assisted diagnosis. Please verify serious crop disease decisions with an agricultural expert.' }}</p>
+        <p>AI-assisted diagnosis, not expert confirmation.</p>
+        <p>{{ scan.disclaimer || scan.advisory_disclaimer || 'AI-assisted diagnosis, not expert confirmation. Please verify serious crop disease decisions with an agricultural expert.' }}</p>
       </div>
 
       @if (scan.image_guidance) {

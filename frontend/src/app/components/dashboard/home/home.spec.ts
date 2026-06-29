@@ -42,6 +42,7 @@ describe('Home', () => {
               status: 'active',
               source: 'auto_generated_demo_sensor',
               source_label: 'Demo sensor',
+              last_updated: '2026-06-01T10:00:00Z',
             },
           ],
           weather: {
@@ -70,6 +71,7 @@ describe('Home', () => {
             ai_mode: 'custom_trained_model',
             label: 'Tomato early blight',
             confidence: 0.968,
+            severity: 'medium',
             recommendation: 'Remove affected lower leaves.',
             summary: 'The image is most consistent with tomato early blight.',
             created_at: '2026-06-01T10:00:00+00:00',
@@ -163,10 +165,18 @@ describe('Home', () => {
     expect(aiCard?.metrics).toEqual([
       { label: 'Mode', value: 'Custom AI' },
       { label: 'Result', value: 'Tomato early blight' },
-      { label: 'Confidence', value: '97%' },
+      { label: 'Model probability', value: '97%' },
+      { label: 'Source', value: 'Latest AI scan' },
       { label: 'Recommendation', value: 'Remove affected lower leaves.' },
     ]);
     expect(detectCropDiseaseCalls).toBe(0);
+  });
+
+  it('should render a balanced farm health score when enough data is available', () => {
+    const healthCard = component.dashboardKpiCards.find((card) => card.label === 'Farm Health Score');
+
+    expect(healthCard?.value).toBe('76/100');
+    expect(healthCard?.detail).toBe('Balanced from sensors, alerts, weather, and scans');
   });
 
   it('should render no scan state from dashboard summary', () => {
@@ -186,6 +196,7 @@ describe('Home', () => {
         ai_mode: null,
         label: 'No scans yet',
         confidence: null,
+        severity: null,
         recommendation: 'Upload a crop image to get AI guidance.',
         summary: '',
         created_at: '',
@@ -196,7 +207,8 @@ describe('Home', () => {
     const aiCard = component.smartFeatureCards.find((card) => card.title === 'AI Crop Detection');
     expect(aiCard?.metrics[0]).toEqual({ label: 'Mode', value: 'No scan yet' });
     expect(aiCard?.metrics[1]).toEqual({ label: 'Result', value: 'No scans yet' });
-    expect(aiCard?.metrics[2]).toEqual({ label: 'Confidence', value: 'N/A' });
+    expect(aiCard?.metrics[2]).toEqual({ label: 'Model probability', value: 'N/A' });
+    expect(component.dashboardKpiCards.find((card) => card.label === 'Farm Health Score')?.value).toBe('Not enough data yet');
   });
 
   it('should render recent sensor reading source labels', () => {
@@ -207,5 +219,6 @@ describe('Home', () => {
     expect(component.sensorRows[0].source_label).toBe('Demo sensor');
     expect(tableText).toContain('Source');
     expect(tableText).toContain('Demo sensor');
+    expect(tableText).toContain('Last updated');
   });
 });

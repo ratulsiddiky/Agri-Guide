@@ -23,6 +23,18 @@
     }
   </section>
 
+  @if (isLoadingStats || dashboardEmptyMessage) {
+    <section class="dashboard-card dashboard-state" [class.loading-state]="isLoadingStats">
+      @if (isLoadingStats) {
+        <span class="loading-spinner" aria-hidden="true"></span>
+      }
+      <div>
+        <h2>{{ isLoadingStats ? 'Loading dashboard summary' : 'Dashboard data needed' }}</h2>
+        <p>{{ dashboardEmptyMessage }}</p>
+      </div>
+    </section>
+  }
+
   <section class="section-heading">
     <div>
       <p class="eyebrow">Live Intelligence</p>
@@ -68,6 +80,7 @@
             <th>Value</th>
             <th>Source</th>
             <th>Status</th>
+            <th>Last updated</th>
           </tr>
         </thead>
         <tbody>
@@ -79,10 +92,11 @@
               <td>{{ row.value }}</td>
               <td><span class="reading-source">{{ row.source_label || row.source || 'Unknown source' }}</span></td>
               <td><span class="reading-status">{{ row.status }}</span></td>
+              <td>{{ formatLastUpdated(row.last_updated) }}</td>
             </tr>
           } @empty {
             <tr>
-              <td colspan="6">No farm sensors yet. Create a farm to generate demo readings.</td>
+              <td colspan="7">{{ dashboardEmptyMessage || 'No recent sensor readings yet.' }}</td>
             </tr>
           }
         </tbody>

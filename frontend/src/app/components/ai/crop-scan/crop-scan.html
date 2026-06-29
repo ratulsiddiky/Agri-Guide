@@ -3,7 +3,7 @@
     <div>
       <p class="eyebrow">AI Crop Scan</p>
       <h1>Crop health image scan</h1>
-      <p>Upload a crop or leaf image to get an AI-assisted diagnosis, confidence score, and practical next steps.</p>
+      <p>Upload a crop or leaf image to get an AI-assisted diagnosis, model probability, and practical next steps.</p>
     </div>
     <a routerLink="/farms" class="btn btn-outline-success btn-sm">Back to farms</a>
   </section>
@@ -43,7 +43,7 @@
           {{ selectedImageStatus() }}
         </small>
         <small class="d-block mt-1 text-muted">
-          Custom AI currently supports tomato, potato, and pepper bell leaf images.
+          Supported images: tomato, potato, and pepper bell leaf images only.
         </small>
 
         @if (cameraError) {
@@ -147,6 +147,11 @@
           </div>
         }
 
+        <div class="disclaimer-box image-note">
+          <strong>Supported images</strong>
+          <p>Tomato, potato, and pepper bell leaf images only.</p>
+        </div>
+
         @if (result.image_guidance) {
           <div class="disclaimer-box image-note">
             <strong>Image guidance</strong>
@@ -155,7 +160,7 @@
         }
 
         <div class="metric-row">
-          <span>{{ isUncertainScan(result) ? 'Final confidence' : 'Confidence' }}</span>
+          <span>Model probability</span>
           <strong>{{ confidencePercent(result) }}</strong>
         </div>
         <div class="metric-row">
@@ -208,15 +213,16 @@
         <h4>When to seek expert help</h4>
         <p class="advice-copy">{{ result.when_to_seek_expert_help || 'Get a second opinion if symptoms spread or the crop gets worse.' }}</p>
 
-        <h4>Confidence explanation</h4>
-        <p class="advice-copy">{{ result.confidence_explanation || 'Confidence reflects the model’s simulated assessment of the image.' }}</p>
+        <h4>Model probability explanation</h4>
+        <p class="advice-copy">{{ result.confidence_explanation || 'Model probability reflects the model assessment of the image.' }}</p>
 
         <h4>Severity explanation</h4>
         <p class="advice-copy">{{ result.severity_explanation || 'Severity reflects the suggested urgency of field follow-up.' }}</p>
 
         <div class="disclaimer-box">
           <strong>Advisory disclaimer</strong>
-          <p>{{ result.disclaimer || result.advisory_disclaimer || 'AI-assisted diagnosis. Please verify serious crop disease decisions with an agricultural expert.' }}</p>
+          <p>AI-assisted diagnosis, not expert confirmation.</p>
+          <p>{{ result.disclaimer || result.advisory_disclaimer || 'AI-assisted diagnosis, not expert confirmation. Please verify serious crop disease decisions with an agricultural expert.' }}</p>
         </div>
 
         <small class="text-muted">
@@ -246,13 +252,13 @@
       <div class="history-list">
         @for (scan of history; track scan.scan_id) {
           <a class="history-item history-link" [routerLink]="['/ai/scans', scan.scan_id]">
-            <div>
+            <div class="history-content">
               <div class="history-heading">
-                <strong>{{ scan.label }}</strong>
+                <strong class="history-title">{{ scan.label }}</strong>
                 <span class="severity severity-{{ scan.severity || 'low' }}">{{ scan.severity || 'low' }}</span>
               </div>
-              <span>{{ farmName(scan.farm_id) }} · {{ scan.crop_type || 'Crop not specified' }}</span>
-              <small>{{ scan.image_metadata.filename || 'Image' }} · {{ scan.timestamp | date:'short' }}</small>
+              <span class="history-meta">{{ farmName(scan.farm_id) }} · {{ scan.crop_type || 'Crop not specified' }}</span>
+              <small class="history-meta">{{ scan.image_metadata.filename || 'Image' }} · {{ scan.timestamp | date:'short' }}</small>
               <small class="history-summary">{{ historySummary(scan) }}</small>
             </div>
             <div class="history-score">

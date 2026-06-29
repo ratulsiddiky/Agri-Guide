@@ -268,7 +268,6 @@ def _load_runtime():
     try:
         import numpy as np
         from PIL import Image
-        from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
         from tensorflow.keras.models import load_model
     except Exception as exc:
         LOGGER.warning("Custom crop model runtime unavailable; using simulated fallback: %s", exc)
@@ -277,7 +276,6 @@ def _load_runtime():
     _RUNTIME = {
         "np": np,
         "Image": Image,
-        "preprocess_input": preprocess_input,
         "load_model": load_model,
     }
     return _RUNTIME
@@ -434,10 +432,9 @@ def predict_crop_disease(image_bytes):
     try:
         with runtime["Image"].open(BytesIO(image_bytes)) as image:
             image = image.convert("RGB").resize((224, 224))
-            array = runtime["np"].array(image)
+            array = runtime["np"].array(image).astype("float32") / 255.0
 
         batch = runtime["np"].expand_dims(array, axis=0)
-        batch = runtime["preprocess_input"](batch)
         predictions = model.predict(batch, verbose=0)
         scores = runtime["np"].array(predictions)[0]
         class_index = int(runtime["np"].argmax(scores))

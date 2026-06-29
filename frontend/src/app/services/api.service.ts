@@ -71,6 +71,7 @@ export interface DashboardSensorRow {
   status: string;
   source?: string;
   source_label?: string;
+  last_updated?: string;
 }
 
 export interface DashboardWeatherSummary {
@@ -108,6 +109,7 @@ export interface DashboardAiCropDetection {
   ai_mode: string | null;
   label: string;
   confidence: number | null;
+  severity?: string | null;
   recommendation: string;
   summary: string;
   created_at: string;

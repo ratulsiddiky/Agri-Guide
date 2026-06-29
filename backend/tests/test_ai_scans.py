@@ -272,6 +272,133 @@ def test_crop_scan_falls_back_when_custom_model_artifacts_missing(client, monkey
     }
 
 
+def test_custom_crop_model_preprocesses_image_with_training_normalization(monkeypatch):
+    captured = {}
+
+    class FakeImageArray:
+        def __init__(self, pixel):
+            self.pixel = list(pixel)
+            self.dtype = None
+            self.shape = (224, 224, 3)
+
+        def astype(self, dtype):
+            self.dtype = dtype
+            return self
+
+        def __truediv__(self, divisor):
+            return FakeNormalizedArray([channel / divisor for channel in self.pixel])
+
+    class FakeNormalizedArray:
+        def __init__(self, pixel):
+            self.pixel = pixel
+            self.dtype = "float32"
+            self.shape = (224, 224, 3)
+
+        def min(self):
+            return min(self.pixel)
+
+        def max(self):
+            return max(self.pixel)
+
+    class FakeBatch:
+        def __init__(self, array):
+            self.array = array
+            self.dtype = array.dtype
+            self.shape = (1, *array.shape)
+
+        def __getitem__(self, index):
+            if index == (0, 0, 0):
+                return self.array.pixel
+            raise IndexError(index)
+
+        def min(self):
+            return self.array.min()
+
+        def max(self):
+            return self.array.max()
+
+    class FakePredictionArray:
+        def __init__(self, value):
+            self.value = value
+
+        def __getitem__(self, index):
+            return self.value[index]
+
+    class FakeNp:
+        @staticmethod
+        def array(value):
+            if hasattr(value, "getpixel"):
+                return FakeImageArray(value.getpixel((0, 0)))
+            return FakePredictionArray(value)
+
+        @staticmethod
+        def expand_dims(array, axis=0):
+            assert axis == 0
+            return FakeBatch(array)
+
+        @staticmethod
+        def argmax(scores):
+            return max(range(len(scores)), key=lambda index: scores[index])
+
+        @staticmethod
+        def argsort(scores):
+            return sorted(range(len(scores)), key=lambda index: scores[index])
+
+    class FakeImage:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return None
+
+        def convert(self, mode):
+            captured["mode"] = mode
+            return self
+
+        def resize(self, size):
+            captured["size"] = size
+            return self
+
+        def getpixel(self, position):
+            captured["pixel_position"] = position
+            return (128, 64, 32)
+
+    class FakeImageModule:
+        @staticmethod
+        def open(image_bytes):
+            captured["image_bytes"] = image_bytes
+            return FakeImage()
+
+    class FakeModel:
+        def predict(self, batch, verbose=0):
+            captured["batch"] = batch
+            captured["verbose"] = verbose
+            scores = [0.0] * len(smart_routes.crop_disease_model.EXPECTED_LABELS)
+            scores[smart_routes.crop_disease_model.EXPECTED_LABELS.index("Tomato_healthy")] = 0.91
+            return [scores]
+
+    monkeypatch.setenv("AI_PROVIDER", "custom_model")
+    monkeypatch.setattr(smart_routes.crop_disease_model, "_RUNTIME", {"np": FakeNp, "Image": FakeImageModule})
+    monkeypatch.setattr(smart_routes.crop_disease_model, "_MODEL", FakeModel())
+    monkeypatch.setattr(smart_routes.crop_disease_model, "_LABELS", smart_routes.crop_disease_model.EXPECTED_LABELS)
+
+    result = smart_routes.crop_disease_model.predict_crop_disease(b"fake image bytes")
+
+    batch = captured["batch"]
+    assert captured["image_bytes"].getvalue() == b"fake image bytes"
+    assert captured["mode"] == "RGB"
+    assert captured["size"] == (224, 224)
+    assert captured["pixel_position"] == (0, 0)
+    assert captured["verbose"] == 0
+    assert batch.shape == (1, 224, 224, 3)
+    assert batch.dtype == "float32"
+    assert batch[0, 0, 0] == [128 / 255.0, 64 / 255.0, 32 / 255.0]
+    assert batch.min() >= 0.0
+    assert batch.max() <= 1.0
+    assert result["prediction"]["raw_label"] == "Tomato_healthy"
+    assert result["prediction"]["top_predictions"][0]["label"] == "Tomato_healthy"
+
+
 def test_crop_scan_custom_model_prediction_maps_to_response_shape(client, monkeypatch):
     custom_result = {
         "prediction": {

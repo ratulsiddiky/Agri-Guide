@@ -540,6 +540,7 @@ def test_dashboard_summary_sensor_rows_include_source_labels_and_clean_units(cli
     assert rows["lux-demo"]["value"] == "34,599 lux"
     assert rows["lux-demo"]["source"] == "auto_generated_demo_sensor"
     assert rows["lux-demo"]["source_label"] == "Demo sensor"
+    assert "last_updated" in rows["lux-demo"]
     assert rows["ph-manual"]["value"] == "6.0 pH"
     assert rows["ph-manual"]["source"] == "manual_sensor_reading"
     assert rows["ph-manual"]["source_label"] == "Manual reading"
@@ -622,6 +623,7 @@ def test_dashboard_summary_uses_latest_ai_scan_for_current_user(client):
                     "recommendation": "Remove affected lower leaves.",
                 },
                 "recommendation": "Remove affected lower leaves.",
+                "severity": "medium",
                 "explanation": "The image is most consistent with tomato early blight.",
                 "model_mode": "custom_trained_model",
                 "ai_mode": "custom_trained_model",
@@ -651,6 +653,7 @@ def test_dashboard_summary_uses_latest_ai_scan_for_current_user(client):
     assert ai_card["confidence"] == 0.968
     assert ai_card["model_mode"] == "custom_trained_model"
     assert ai_card["ai_mode"] == "custom_trained_model"
+    assert ai_card["severity"] == "medium"
     assert ai_card["recommendation"] == "Remove affected lower leaves."
     assert ai_card["label"] != "Healthy Leaf"
     assert ai_card["label"] != "Other user disease"
@@ -727,6 +730,7 @@ def test_dashboard_summary_returns_safe_fallbacks_without_weather_or_scans(clien
     assert payload["latest_sensor_readings"]["data_source"] == "fallback_demo"
     assert payload["ai_crop_detection"]["data_source"] == "fallback_demo"
     assert payload["ai_crop_detection"]["label"] == "No scans yet"
+    assert payload["ai_crop_detection"]["severity"] is None
     assert payload["irrigation_decision"]["data_source"] == "fallback_demo"
 
 

@@ -686,6 +686,7 @@ def _dashboard_ai_scan_payload(current_user):
             "ai_mode": None,
             "label": "No scans yet",
             "confidence": None,
+            "severity": None,
             "recommendation": "Upload a crop image to get AI guidance.",
             "summary": "",
             "created_at": "",
@@ -702,6 +703,7 @@ def _dashboard_ai_scan_payload(current_user):
         "ai_mode": ai_mode,
         "label": prediction.get("label") or latest_scan.get("diagnosis") or "AI scan available",
         "confidence": prediction.get("confidence"),
+        "severity": latest_scan.get("severity"),
         "recommendation": latest_scan.get("recommendation") or prediction.get("recommendation") or "Review the latest scan details.",
         "summary": latest_scan.get("explanation") or prediction.get("summary") or "",
         "created_at": _iso_timestamp(latest_scan.get("created_at")),
@@ -1501,6 +1503,7 @@ def get_dashboard_summary(current_user):
                     "status": str(sensor.get("status", "unknown")),
                     "source": source,
                     "source_label": _sensor_source_label(source),
+                    "last_updated": _sensor_timestamp(sensor),
                 }
             )
 

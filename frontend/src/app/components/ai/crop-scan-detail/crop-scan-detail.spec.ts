@@ -148,6 +148,7 @@ describe('CropScanDetail', () => {
       'The scan compares visible crop symptoms with the simulated diagnosis knowledge base.'
     );
     expect(compiled.textContent).toContain('Severity reflects the suggested urgency of field follow-up.');
-    expect(compiled.textContent).toContain('Confidence reflects the model’s simulated assessment of the image.');
+    expect(compiled.textContent).toContain('Model probability reflects the model assessment of the image.');
+    expect(compiled.textContent).toContain('AI-assisted diagnosis, not expert confirmation.');
   });
 });

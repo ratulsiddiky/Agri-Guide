@@ -26,11 +26,15 @@ export class Home implements OnInit, OnDestroy {
 
   totalFarms = 0;
   isLoadingStats = true;
+  summaryLoadFailed = false;
+  farmHealthScore: number | null = null;
+  farmHealthDetail = 'Not enough data yet';
   private dashboardLocationSource: DashboardSummaryResponse['location_source'] | null = null;
   private dashboardTimezone: string | null = null;
   private destroy$ = new Subject<void>();
 
   kpiCards = [
+    { label: 'Farm Health Score', value: '...', detail: 'Balanced from sensors, alerts, weather, and scans', tone: 'green' },
     { label: 'Total Farms', value: this.totalFarms, detail: 'Currently tracked', tone: 'green' },
     { label: 'Active Alerts', value: '...', detail: 'Needs attention', tone: 'amber' },
     { label: 'Total Sensors', value: '...', detail: 'Across all farms', tone: 'blue' },
@@ -72,7 +76,7 @@ export class Home implements OnInit, OnDestroy {
       metrics: [
         { label: 'Mode', value: 'No scan yet' },
         { label: 'Result', value: 'No scans yet' },
-        { label: 'Confidence', value: 'N/A' },
+        { label: 'Model probability', value: 'N/A' },
         { label: 'Recommendation', value: 'Upload a crop image to get AI guidance.' },
       ],
     },
@@ -134,8 +138,34 @@ export class Home implements OnInit, OnDestroy {
     return this.kpiCards.map((card) =>
       card.label === 'Total Farms'
         ? { ...card, value: this.isLoadingStats ? '...' : this.totalFarms }
+        : card.label === 'Farm Health Score'
+        ? {
+            ...card,
+            value: this.isLoadingStats
+              ? '...'
+              : this.farmHealthScore === null
+              ? 'Not enough data yet'
+              : `${this.farmHealthScore}/100`,
+            detail: this.farmHealthDetail,
+          }
         : card
     );
+  }
+
+  get dashboardEmptyMessage(): string {
+    if (this.isLoadingStats) {
+      return 'Loading your dashboard summary...';
+    }
+    if (this.summaryLoadFailed) {
+      return 'Unable to load the dashboard summary right now.';
+    }
+    if (this.totalFarms === 0) {
+      return 'No farms yet. Create your first farm to start collecting dashboard data.';
+    }
+    if (this.sensorRows.length === 0) {
+      return 'No sensor readings yet. Add sensors or generate demo sensors from a farm page.';
+    }
+    return '';
   }
 
   ngOnInit() {
@@ -208,14 +238,19 @@ export class Home implements OnInit, OnDestroy {
     this.isLoadingStats = false;
     if (!summary) {
       this.totalFarms = 0;
+      this.summaryLoadFailed = true;
+      this.farmHealthScore = null;
+      this.farmHealthDetail = 'Dashboard summary unavailable';
       this.dashboardLocationSource = null;
       this.dashboardTimezone = null;
       return;
     }
 
+    this.summaryLoadFailed = false;
     this.dashboardLocationSource = summary.location_source ?? null;
     this.dashboardTimezone = summary.timezone ?? null;
     this.totalFarms = summary.total_farms;
+    this.applyFarmHealthScore(summary);
     this.updateKpiCard('Total Farms', `${summary.total_farms}`, 'Your farms');
     this.updateKpiCard('Total Sensors', `${summary.total_sensors}`, 'Across your farms');
     this.updateKpiCard('Active Alerts', `${summary.active_alerts_count}`, 'From your farms');
@@ -230,7 +265,7 @@ export class Home implements OnInit, OnDestroy {
     this.updateKpiCard(
       "Today's Forecast",
       this.formatNumberWithUnit(summary.weather?.temperature_c ?? summary.latest_temperature, '°C'),
-      summary.weather?.condition_summary || 'Latest farm temperature'
+      `${summary.weather?.condition_summary || 'Latest farm temperature'} · ${this.formatDataSource(summary.weather?.data_source)}`
     );
 
     const sensorReadings = summary.latest_sensor_readings;
@@ -251,6 +286,10 @@ export class Home implements OnInit, OnDestroy {
         label: 'Light',
         value: this.formatNumberWithUnit(sensorReadings?.light_lux ?? null, ' lux', 'No reading'),
       },
+      {
+        label: 'Source',
+        value: this.formatDataSource(sensorReadings?.data_source),
+      },
     ]);
 
     const irrigation = summary.irrigation_decision;
@@ -264,7 +303,8 @@ export class Home implements OnInit, OnDestroy {
     this.updateFeatureCard('AI Crop Detection', [
       { label: 'Mode', value: this.formatAiMode(aiScan) },
       { label: 'Result', value: aiScan?.label ?? 'No scans yet' },
-      { label: 'Confidence', value: this.formatConfidence(aiScan?.confidence ?? null) },
+      { label: 'Model probability', value: this.formatConfidence(aiScan?.confidence ?? null) },
+      { label: 'Source', value: this.formatDataSource(aiScan?.data_source) },
       { label: 'Recommendation', value: aiScan?.recommendation ?? 'Upload a crop image to get AI guidance.' },
     ]);
 
@@ -272,6 +312,7 @@ export class Home implements OnInit, OnDestroy {
     this.updateFeatureCard('Weather Alert', [
       { label: 'Level', value: weatherAlert?.level ?? 'None' },
       { label: 'Message', value: weatherAlert?.message ?? 'No synced weather available yet' },
+      { label: 'Source', value: this.formatDataSource(weatherAlert?.data_source) },
       {
         label: 'Action',
         value: weatherAlert?.recommended_action ?? 'Sync weather from a farm detail page to see current alerts.',
@@ -315,6 +356,73 @@ export class Home implements OnInit, OnDestroy {
       { label: 'Mode', value: failover.failover_mode },
       { label: 'Confidence', value: failover.confidence },
     ]);
+  }
+
+  formatLastUpdated(value: string | null | undefined): string {
+    if (!value) {
+      return 'Not available';
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return value;
+    }
+    return new Intl.DateTimeFormat('en-GB', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(parsed);
+  }
+
+  private applyFarmHealthScore(summary: DashboardSummaryResponse): void {
+    if (summary.average_soil_moisture === null || summary.average_soil_moisture === undefined) {
+      this.farmHealthScore = null;
+      this.farmHealthDetail = 'Not enough data yet';
+      return;
+    }
+
+    let score = 100;
+    score -= this.soilMoisturePenalty(summary.average_soil_moisture);
+    score -= Math.min((summary.active_alerts_count || 0) * 10, 25);
+    score -= this.levelPenalty(summary.weather_alert?.level);
+    score -= this.levelPenalty(summary.ai_crop_detection?.severity);
+
+    this.farmHealthScore = Math.max(0, Math.min(100, Math.round(score)));
+    this.farmHealthDetail = 'Balanced from sensors, alerts, weather, and scans';
+  }
+
+  private soilMoisturePenalty(value: number): number {
+    if (value >= 45 && value <= 70) {
+      return 0;
+    }
+    const distance = value < 45 ? 45 - value : value - 70;
+    return Math.min(25, Math.round(distance));
+  }
+
+  private levelPenalty(level: string | null | undefined): number {
+    switch ((level || '').toLowerCase()) {
+      case 'high':
+        return 25;
+      case 'medium':
+        return 16;
+      case 'low':
+        return 8;
+      default:
+        return 0;
+    }
+  }
+
+  private formatDataSource(source: string | null | undefined): string {
+    switch (source) {
+      case 'latest_weather_log':
+        return 'Synced weather';
+      case 'latest_sensor_reading':
+        return 'Latest sensor reading';
+      case 'latest_ai_scan':
+        return 'Latest AI scan';
+      case 'fallback_demo':
+        return 'Demo fallback';
+      default:
+        return 'No live data yet';
+    }
   }
 
   private formatNumberWithUnit(value: number | null | undefined, unit: string, fallback = 'N/A'): string {
