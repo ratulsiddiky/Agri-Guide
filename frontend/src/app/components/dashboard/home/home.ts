@@ -29,6 +29,10 @@ export class Home implements OnInit, OnDestroy {
   summaryLoadFailed = false;
   farmHealthScore: number | null = null;
   farmHealthDetail = 'Not enough data yet';
+  primaryFarmId: string | null = null;
+  weatherSyncLoading = false;
+  weatherSyncMessage = '';
+  weatherSyncError = '';
   private dashboardLocationSource: DashboardSummaryResponse['location_source'] | null = null;
   private dashboardTimezone: string | null = null;
   private destroy$ = new Subject<void>();
@@ -210,6 +214,51 @@ export class Home implements OnInit, OnDestroy {
       });
   }
 
+  syncDashboardWeather(): void {
+    this.weatherSyncMessage = '';
+    this.weatherSyncError = '';
+
+    if (!this.primaryFarmId) {
+      this.weatherSyncError = 'Add a farm to sync weather.';
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.weatherSyncLoading = true;
+    this.cdr.markForCheck();
+
+    this.apiService.syncWeather(this.primaryFarmId)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.apiService.getDashboardSummary()
+            .pipe(
+              catchError((err) => {
+                console.error('Dashboard summary refresh failed after weather sync', err);
+                this.weatherSyncError = 'Weather synced, but the dashboard could not refresh. Please reload the page.';
+                return of(null as DashboardSummaryResponse | null);
+              }),
+              takeUntil(this.destroy$)
+            )
+            .subscribe((summary) => {
+              if (summary) {
+                this.applyDashboardSummary(summary);
+                this.weatherSyncMessage = 'Weather synced. Dashboard updated.';
+              }
+              this.weatherSyncLoading = false;
+              this.cdr.markForCheck();
+            });
+        },
+        error: (err) => {
+          this.weatherSyncError =
+            this.apiService.getErrorMessage(err) ||
+            'Weather sync is taking longer than expected. Please try again shortly.';
+          this.weatherSyncLoading = false;
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
   private updateFeatureCard(title: string, metrics: { label: string; value: string }[]): void {
     this.smartFeatureCards = this.smartFeatureCards.map((card) =>
       card.title === title ? { ...card, metrics } : card
@@ -241,6 +290,7 @@ export class Home implements OnInit, OnDestroy {
       this.summaryLoadFailed = true;
       this.farmHealthScore = null;
       this.farmHealthDetail = 'Dashboard summary unavailable';
+      this.primaryFarmId = null;
       this.dashboardLocationSource = null;
       this.dashboardTimezone = null;
       return;
@@ -249,6 +299,7 @@ export class Home implements OnInit, OnDestroy {
     this.summaryLoadFailed = false;
     this.dashboardLocationSource = summary.location_source ?? null;
     this.dashboardTimezone = summary.timezone ?? null;
+    this.primaryFarmId = summary.primary_farm_id ?? null;
     this.totalFarms = summary.total_farms;
     this.applyFarmHealthScore(summary);
     this.updateKpiCard('Total Farms', `${summary.total_farms}`, 'Your farms');

@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 
 import { Home } from './home';
 
@@ -11,6 +11,9 @@ describe('Home', () => {
   let component: Home;
   let fixture: ComponentFixture<Home>;
   let detectCropDiseaseCalls: number;
+  let dashboardSummaryCalls: number;
+  let syncWeatherCalledWith = '';
+  let syncWeatherShouldFail = false;
 
   beforeEach(async () => {
     const authServiceStub = {
@@ -23,9 +26,13 @@ describe('Home', () => {
     } as unknown as AuthService;
 
     detectCropDiseaseCalls = 0;
+    dashboardSummaryCalls = 0;
+    syncWeatherCalledWith = '';
+    syncWeatherShouldFail = false;
     const apiServiceStub = {
-      getDashboardSummary: () =>
-        of({
+      getDashboardSummary: () => {
+        dashboardSummaryCalls += 1;
+        return of({
           total_farms: 1,
           total_sensors: 5,
           average_soil_moisture: 58,
@@ -33,6 +40,7 @@ describe('Home', () => {
           latest_humidity: 64,
           active_alerts_count: 0,
           irrigation_recommendation: 'No irrigation required',
+          primary_farm_id: 'farm-1',
           sensor_rows: [
             {
               sensor: 'lux-demo',
@@ -91,7 +99,14 @@ describe('Home', () => {
             soil_moisture_percent: 58,
             data_source: 'latest_sensor_reading',
           },
-        }),
+        });
+      },
+      syncWeather: (id: string) => {
+        syncWeatherCalledWith = id;
+        return syncWeatherShouldFail
+          ? throwError(() => ({ status: 504, error: { message: '' } }))
+          : of(void 0);
+      },
       getSystemMetrics: () => of(null),
       getLatestSensors: () => of(null),
       detectCropDisease: () => {
@@ -156,7 +171,7 @@ describe('Home', () => {
     const forecast = component.dashboardKpiCards.find((card) => card.label === "Today's Forecast");
 
     expect(forecast?.value).toBe('18.7°C');
-    expect(forecast?.detail).toBe('Partly cloudy');
+    expect(forecast?.detail).toBe('Partly cloudy · Synced weather');
   });
 
   it('should render latest custom AI scan instead of simulated detection data', () => {
@@ -220,5 +235,34 @@ describe('Home', () => {
     expect(tableText).toContain('Source');
     expect(tableText).toContain('Demo sensor');
     expect(tableText).toContain('Last updated');
+  });
+
+  it('should sync weather for the primary farm and refresh the dashboard summary', () => {
+    component.syncDashboardWeather();
+
+    expect(syncWeatherCalledWith).toBe('farm-1');
+    expect(dashboardSummaryCalls).toBe(2);
+    expect(component.weatherSyncMessage).toBe('Weather synced. Dashboard updated.');
+    expect(component.weatherSyncError).toBe('');
+  });
+
+  it('should not sync weather when no primary farm is available', () => {
+    component.primaryFarmId = null;
+
+    component.syncDashboardWeather();
+
+    expect(syncWeatherCalledWith).toBe('');
+    expect(component.weatherSyncError).toBe('Add a farm to sync weather.');
+  });
+
+  it('should show a friendly weather sync error', () => {
+    syncWeatherShouldFail = true;
+
+    component.syncDashboardWeather();
+
+    expect(syncWeatherCalledWith).toBe('farm-1');
+    expect(component.weatherSyncError).toBe(
+      'The server was unable to complete the farm request. Please try again later.'
+    );
   });
 });

@@ -40,6 +40,28 @@
       <p class="eyebrow">Live Intelligence</p>
       <h2>Smart agriculture controls</h2>
     </div>
+    <div class="weather-sync-panel">
+      <button
+        class="sync-weather-button"
+        type="button"
+        (click)="syncDashboardWeather()"
+        [disabled]="weatherSyncLoading || !primaryFarmId"
+      >
+        @if (weatherSyncLoading) {
+          <span class="loading-spinner button-spinner" aria-hidden="true"></span>
+        }
+        {{ weatherSyncLoading ? 'Syncing weather...' : 'Sync Weather' }}
+      </button>
+      @if (!primaryFarmId && !isLoadingStats) {
+        <span class="sync-weather-note">Add a farm to sync weather.</span>
+      }
+      @if (weatherSyncMessage) {
+        <span class="sync-weather-note success-note">{{ weatherSyncMessage }}</span>
+      }
+      @if (weatherSyncError) {
+        <span class="sync-weather-note error-note">{{ weatherSyncError }}</span>
+      }
+    </div>
   </section>
 
   <section class="feature-grid" aria-label="Smart agriculture insights">

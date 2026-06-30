@@ -234,12 +234,62 @@
   display: flex;
   align-items: end;
   justify-content: space-between;
+  gap: 1rem;
   margin-top: 0.5rem;
 }
 
 .section-heading h2,
 .table-title h2 {
   font-size: clamp(1.4rem, 2.5vw, 2rem);
+}
+
+.weather-sync-panel {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  max-width: min(100%, 520px);
+}
+
+.sync-weather-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 40px;
+  padding: 0.58rem 0.95rem;
+  border: 1px solid rgba(15, 139, 99, 0.32);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0f6f51;
+  font-weight: 800;
+  box-shadow: 0 10px 24px rgba(48, 87, 74, 0.1);
+}
+
+.sync-weather-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.button-spinner {
+  width: 1rem;
+  height: 1rem;
+  border-width: 2px;
+}
+
+.sync-weather-note {
+  color: #60786f;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.success-note {
+  color: #13734f;
+}
+
+.error-note {
+  color: #b42318;
 }
 
 .feature-card {
@@ -405,6 +455,20 @@ tbody tr:last-child td {
   .kpi-grid,
   .feature-grid {
     grid-template-columns: 1fr;
+  }
+
+  .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .weather-sync-panel,
+  .sync-weather-button {
+    width: 100%;
+  }
+
+  .weather-sync-panel {
+    justify-content: stretch;
   }
 
   .feature-card dl div {
